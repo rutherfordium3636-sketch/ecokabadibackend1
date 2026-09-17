@@ -1,6 +1,363 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authorized Buyers</title><link rel="stylesheet" href="style.css"></head><body><script src="config.js"></script><script src="app.js"></script><script>shell("Buyers")</script>
-<main class="page fade"><div class="eyebrow">AUTHORIZED BUYER NETWORK</div><h1 class="title">Sell into a verified recovery route.</h1><p class="subtitle">Ranking considers material fit, authorization status, offered rate, distance, pickup and reliability. Expired authorization is excluded in the intended production flow.</p>
-<div class="grid g3"><div class="card"><div class="muted small">Verified facilities</div><div class="kpi">18</div><span class="badge ok">Active</span></div><div class="card"><div class="muted small">Pickup coverage</div><div class="kpi">74%</div><span class="badge blue">Demo network</span></div><div class="card"><div class="muted small">Reliability floor</div><div class="kpi">85+</div><span class="badge ok">Preferred</span></div></div><div class="section-gap"></div>
-<section class="card"><div class="toolbar"><div><h2>Recommended buyers</h2><div class="muted small">Sample lot: Copper cable • 12.4 kg</div></div><span class="badge ok">4 matches</span></div><div class="list" id="matches"></div></section>
-<div class="section-gap"></div><div class="notice">⚖️ Fair-route check: the highest rate is not always the best route. Show travel, pickup and reliability alongside price.</div></main>
-<script>function renderMatches(){matches.innerHTML=facilities.map(f=>`<div class="row"><div class="material"><div class="material-icon">${f.type.includes('Aggregator')?'🏪':'♻️'}</div><div><b>${f.name}</b><div class="small muted">${f.type} • ${f.dist} • reliability ${f.score}/100</div><div style="margin-top:6px"><span class="badge ok">${f.auth}</span> ${f.pickup?'<span class="badge blue">Pickup</span>':'<span class="badge warn">Self-delivery</span>'}</div><div class="small muted" style="margin-top:5px">${f.materials}</div></div></div><div style="text-align:right"><div class="kpi" style="font-size:22px">${fmt(f.rate)}/kg</div><button class="btn btn-primary" onclick="selectBuyer('${f.name}',${f.rate})">Select</button></div></div>`).join('')}function selectBuyer(n,r){localStorage.setItem('um_buyer',JSON.stringify({name:n,rate:r}));location.href='handover.html'}renderMatches();whenReady(renderMatches);footer()</script></body></html>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Authorized Buyers</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+shell("Buyers");
+</script>
+
+<main class="page fade">
+
+  <div class="eyebrow">REGISTERED BUYER NETWORK</div>
+
+  <h1 class="title">Registered buyers</h1>
+
+  <p class="subtitle">
+    Buyers registered on Urban Mining Connect can view your lot and submit their own quote.
+  </p>
+
+  <div class="grid g3">
+
+    <div class="card">
+      <div class="muted small">Registered buyers</div>
+      <div class="kpi" id="buyerCount">0</div>
+      <span class="badge ok">Live accounts</span>
+    </div>
+
+    <div class="card">
+      <div class="muted small">Your lot</div>
+      <div class="kpi" id="lotWeight">—</div>
+      <span class="badge blue" id="lotMaterial">No lot selected</span>
+    </div>
+
+    <div class="card">
+      <div class="muted small">Buyer quotes</div>
+      <div class="kpi" id="quoteCount">0</div>
+      <span class="badge ok">Received</span>
+    </div>
+
+  </div>
+
+  <div class="section-gap"></div>
+
+  <section class="card">
+
+    <div class="toolbar">
+
+      <div>
+        <h2>Registered buyers</h2>
+        <div class="muted small">
+          Buyers who created accounts on the website.
+        </div>
+      </div>
+
+      <button class="btn btn-primary" onclick="loadBuyers()">
+        Refresh
+      </button>
+
+    </div>
+
+    <div class="section-gap"></div>
+
+    <div class="list" id="buyersList">
+      <div class="notice">
+        Loading registered buyers...
+      </div>
+    </div>
+
+  </section>
+
+  <div class="section-gap"></div>
+
+  <section class="card">
+
+    <div class="toolbar">
+
+      <div>
+        <h2>Quotes for your lot</h2>
+
+        <div class="muted small">
+          Quotes submitted by registered buyers appear here.
+        </div>
+      </div>
+
+    </div>
+
+    <div class="section-gap"></div>
+
+    <div class="list" id="quotesList">
+      <div class="notice">
+        No quotes yet.
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<script>
+
+const API =
+  (window.UM_API_BASE || "/api").replace(/\/$/, "");
+
+let buyers = [];
+let quotes = [];
+
+function esc(v) {
+  return String(v ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+async function loadBuyers() {
+
+  const list = document.getElementById("buyersList");
+
+  list.innerHTML =
+    `<div class="notice">Loading registered buyers...</div>`;
+
+  try {
+
+    const response = await fetch(
+      API + "/buyers",
+      {
+        credentials: "include"
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Could not load buyers");
+    }
+
+    buyers = data.buyers || [];
+
+    document.getElementById("buyerCount").textContent =
+      buyers.length;
+
+    if (!buyers.length) {
+
+      list.innerHTML =
+        `<div class="notice">
+          No registered buyers found yet.
+        </div>`;
+
+      return;
+    }
+
+    list.innerHTML = buyers.map(b => `
+
+      <div class="row">
+
+        <div class="material">
+
+          <div class="material-icon">
+            ♻️
+          </div>
+
+          <div>
+
+            <b>${esc(b.name)}</b>
+
+            <div class="small muted">
+              ${esc(b.email)}
+            </div>
+
+            <div class="small muted">
+              ${esc(b.facility_name || "Registered buyer")}
+            </div>
+
+            ${
+              b.phone
+                ? `<div class="small muted">
+                     ${esc(b.phone)}
+                   </div>`
+                : ""
+            }
+
+          </div>
+
+        </div>
+
+        <div style="text-align:right">
+
+          <span class="badge ok">
+            Registered
+          </span>
+
+        </div>
+
+      </div>
+
+    `).join("");
+
+  } catch (err) {
+
+    list.innerHTML =
+      `<div class="notice">
+        ${esc(err.message)}
+      </div>`;
+  }
+}
+
+
+async function loadQuotes() {
+
+  const lotsResponse = await fetch(
+    API + "/lots",
+    {
+      credentials: "include"
+    }
+  );
+
+  const lotsData = await lotsResponse.json();
+
+  if (!lotsResponse.ok) {
+    throw new Error(
+      lotsData.error || "Could not load your lots"
+    );
+  }
+
+  const lots = lotsData || [];
+
+  if (!lots.length) {
+
+    document.getElementById("quotesList").innerHTML =
+      `<div class="notice">
+        Create a material lot first.
+      </div>`;
+
+    return;
+  }
+
+  const lot = lots[0];
+
+  document.getElementById("lotWeight").textContent =
+    Number(lot.weight || 0) + " kg";
+
+  document.getElementById("lotMaterial").textContent =
+    lot.name || "Material";
+
+  const response = await fetch(
+    API + "/lots/" +
+    encodeURIComponent(lot.id) +
+    "/quotes",
+    {
+      credentials: "include"
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.error || "Could not load quotes"
+    );
+  }
+
+  quotes = data.quotes || [];
+
+  document.getElementById("quoteCount").textContent =
+    quotes.length;
+
+  const list =
+    document.getElementById("quotesList");
+
+  if (!quotes.length) {
+
+    list.innerHTML =
+      `<div class="notice">
+        No buyer has submitted a quote for this lot yet.
+      </div>`;
+
+    return;
+  }
+
+  list.innerHTML = quotes.map(q => `
+
+    <div class="row">
+
+      <div class="material">
+
+        <div class="material-icon">
+          💰
+        </div>
+
+        <div>
+
+          <b>${esc(q.buyer_name)}</b>
+
+          <div class="small muted">
+            ${esc(q.buyer_email)}
+          </div>
+
+          <div class="small muted">
+            ${esc(q.facility_name || "Registered buyer")}
+          </div>
+
+          <div class="small muted">
+            Quote received:
+            ${new Date(q.at).toLocaleString()}
+          </div>
+
+        </div>
+
+      </div>
+
+      <div style="text-align:right">
+
+        <div class="kpi" style="font-size:24px">
+          ₹${esc(q.rate)}/kg
+        </div>
+
+        <span class="badge ok">
+          Quote received
+        </span>
+
+      </div>
+
+    </div>
+
+  `).join("");
+}
+
+
+async function loadPage() {
+
+  try {
+
+    await loadBuyers();
+
+    await loadQuotes();
+
+  } catch (err) {
+
+    console.error(err);
+
+    alert(err.message);
+
+  }
+
+}
+
+loadPage();
+
+footer();
+
+</script>
+
+</body>
+</html>
