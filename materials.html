@@ -2,7 +2,7 @@
 <main class="page fade"><div class="eyebrow">MATERIAL INTELLIGENCE</div><h1 class="title">Secondary raw material map</h1><p class="subtitle">Organize the field around what the material becomes: ferrous feedstock, non-ferrous recovery, critical-mineral-bearing streams and e-waste.</p>
 <div class="pill-tabs" id="tabs"></div><section class="grid g3" id="cards"></section>
 </main>
-<script>
+<script> 
 const groups=["All","Ferrous","Non-Ferrous","Critical Minerals","E-Waste","Mixed Scrap"];
 function render(g){document.getElementById("tabs").innerHTML=groups.map(x=>`<button class="${x===g?"active":""}" onclick="render('${x}')">${x}</button>`).join("");let arr=g==="All"?materials:materials.filter(m=>m.group===g);document.getElementById("cards").innerHTML=arr.map(m=>`<article class="card rise"><div class="metric"><div class="material"><div class="material-icon">${m.icon}</div><div><b>${m.name}</b><div class="small muted">${m.group}</div></div></div><span class="badge ${m.trend==="down"?"warn":"ok"}">${m.trend==="up"?"↑":m.trend==="down"?"↓":"→"}</span></div><div class="kpi">${fmt(m.rate)}<span class="small muted"> / ${m.unit}</span></div><p class="muted small">Indicative valuation • demo seed</p><a class="btn btn-soft" href="capture.html?material=${m.id}">Capture this material</a></article>`).join("")}render("All");footer();
 </script></body></html>
