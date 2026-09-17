@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Urban Mining Connect — Admin Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">Urban Mining Connect</a>
+    <nav class="nav">
+      <a href="index.html">Home</a>
+      <a href="index.html">Platform</a>
+      <a href="profile.html">Profile</a>
+      <a href="#" id="logoutLink">Logout</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <span class="eyebrow">ADMIN</span>
+      <h1>Platform administration</h1>
+      <p>Monitor accounts, material lots, transactions and registered facilities.</p>
+      <div id="adminStatus" class="notice">Checking administrator access…</div>
+    </section>
+
+    <section id="dashboard" hidden>
+      <div class="grid cards">
+        <article class="card"><small>Total accounts</small><strong id="totalUsers">0</strong></article>
+        <article class="card"><small>Collectors</small><strong id="collectors">0</strong></article>
+        <article class="card"><small>Buyers / recyclers</small><strong id="buyers">0</strong></article>
+        <article class="card"><small>Administrators</small><strong id="admins">0</strong></article>
+        <article class="card"><small>Total lots</small><strong id="totalLots">0</strong></article>
+        <article class="card"><small>Open lots</small><strong id="openLots">0</strong></article>
+        <article class="card"><small>Completed lots</small><strong id="completedLots">0</strong></article>
+        <article class="card"><small>Captured weight</small><strong id="weight">0 kg</strong></article>
+        <article class="card"><small>Completed value</small><strong id="value">₹0</strong></article>
+        <article class="card"><small>Facilities</small><strong id="facilities">0</strong></article>
+      </div>
+
+      <section class="card">
+        <div class="row between">
+          <div>
+            <h2>Registered accounts</h2>
+            <p class="muted">Passwords are never displayed.</p>
+          </div>
+          <button id="refreshBtn" type="button">Refresh</button>
+        </div>
+
+        <div class="grid filters">
+          <label>Search
+            <input id="search" type="search" placeholder="Name, email, phone or user ID">
+          </label>
+          <label>Role
+            <select id="role">
+              <option value="">All roles</option>
+              <option value="collector">Collector</option>
+              <option value="buyer">Buyer / Recycler</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>User ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Role</th>
+                <th>Created</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="usersBody">
+              <tr><td colspan="7">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="row between"><div><h2>Buyer / recycler activity</h2><p class="muted">Buyer accounts, quotes and accepted lots recorded in the platform database.</p></div></div>
+        <div class="grid cards"><article class="card"><small>Buyer accounts</small><strong id="buyerAccounts">0</strong></article><article class="card"><small>Lots quoted</small><strong id="quotedLots">0</strong></article><article class="card"><small>Lots accepted</small><strong id="acceptedLots">0</strong></article></div>
+      </section>
+
+      <section class="card">
+        <div class="row between"><div><h2>Material lots</h2><p class="muted">Live records from the same backend database used by collectors and buyers.</p></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Lot ID</th><th>Material</th><th>Stream</th><th>Weight</th><th>Status</th><th>Facility</th><th>Created</th></tr></thead><tbody id="lotsBody"><tr><td colspan="7">Loading…</td></tr></tbody></table></div>
+      </section>
+
+      <section class="card">
+        <div class="row between"><div><h2>Handovers / transactions</h2><p class="muted">Recorded handover references and transaction values.</p></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Handover</th><th>Lot</th><th>Facility</th><th>Weight</th><th>Final value</th><th>Payment</th><th>Confirmed</th></tr></thead><tbody id="handoversBody"><tr><td colspan="7">Loading…</td></tr></tbody></table></div>
+      </section>
+    </section>
+  </main>
+
+<script>
+(() => {
+  const API = (window.UM_API_BASE || "/api").replace(/\/$/, "");
+  let users = [];
+  let lots = [];
+  let handovers = [];
+
+  async function api(path, options = {}) {
+    const res = await fetch(API + path, {
+      credentials: "include",
+      headers: {"Content-Type":"application/json", ...(options.headers || {})},
+      ...options
+    });
+    let data = {};
+    try { data = await res.json(); } catch (_) {}
+    if (!res.ok) throw new Error(data.error || ("Request failed: " + res.status));
+    return data;
+  }
+
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+
+  function render() {
+    const q = document.getElementById("search").value.trim().toLowerCase();
+    const role = document.getElementById("role").value;
+    const filtered = users.filter(u => {
+      const hay = [u.id,u.user_id,u.name,u.email,u.phone,u.role].join(" ").toLowerCase();
+      return (!q || hay.includes(q)) && (!role || u.role === role);
+    });
+
+    document.getElementById("usersBody").innerHTML = filtered.length
+      ? filtered.map(u => `<tr>
+          <td>${esc(u.id || u.user_id || "")}</td>
+          <td>${esc(u.name || "")}</td>
+          <td>${esc(u.email || "")}</td>
+          <td>${esc(u.phone || "")}</td>
+          <td>${esc(u.role || "")}</td>
+          <td>${esc(u.created_at ? new Date(u.created_at).toLocaleString() : "")}</td>
+          <td>${u.active === false ? "Inactive" : "Active"}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="7">No matching accounts.</td></tr>`;
+  }
+
+  function renderLots() {
+    const body = document.getElementById("lotsBody");
+    body.innerHTML = lots.length ? lots.map(l => `<tr><td>${esc(l.id)}</td><td>${esc(l.name)}</td><td>${esc(l.group)}</td><td>${esc(l.weight)} kg</td><td>${esc(l.transaction_status || l.status || "")}</td><td>${esc(l.facility_id || "—")}</td><td>${esc(l.created ? new Date(l.created).toLocaleString() : "")}</td></tr>`).join("") : `<tr><td colspan="7">No material lots yet.</td></tr>`;
+  }
+
+  function renderHandovers() {
+    const body = document.getElementById("handoversBody");
+    body.innerHTML = handovers.length ? handovers.map(h => { const value = Number(h.final_price || 0) * Number(h.weight || 0); return `<tr><td>${esc(h.handover_id)}</td><td>${esc(h.lot_id)}</td><td>${esc(h.facility_name)}</td><td>${esc(h.weight)} kg</td><td>₹${value.toLocaleString("en-IN")}</td><td>${esc(h.payment_status || "pending")}</td><td>${esc(h.confirmed_at ? new Date(h.confirmed_at).toLocaleString() : "")}</td></tr>`; }).join("") : `<tr><td colspan="7">No handovers yet.</td></tr>`;
+  }
+
+  function set(id, value) { const el = document.getElementById(id); if (el) el.textContent = value; }
+
+  async function load() {
+    try {
+      const me = await api("/auth/me");
+      if (!me.user || me.user.role !== "admin") {
+        location.href = "login.html";
+        return;
+      }
+
+      const data = await api("/admin/dashboard");
+      const stats = data.stats || data;
+
+      users = data.users || data.accounts || [];
+      lots = data.lots || [];
+      handovers = data.handovers || [];
+      set("totalUsers", stats.totalUsers ?? users.length);
+      set("collectors", stats.collectors ?? users.filter(u => u.role === "collector").length);
+      set("buyers", stats.buyers ?? stats.recyclers ?? users.filter(u => u.role === "buyer").length);
+      set("admins", stats.admins ?? users.filter(u => u.role === "admin").length);
+      set("totalLots", stats.totalLots ?? 0);
+      set("openLots", stats.openLots ?? 0);
+      set("completedLots", stats.completedLots ?? 0);
+      set("weight", `${stats.totalWeightKg ?? stats.weightKg ?? 0} kg`);
+      set("value", `₹${Number(stats.completedValue ?? stats.value ?? 0).toLocaleString("en-IN")}`);
+      set("facilities", stats.facilities ?? 0);
+      set("buyerAccounts", users.filter(u => u.role === "buyer" || u.role === "recycler").length);
+      set("quotedLots", lots.filter(l => l.quoted_price != null).length);
+      set("acceptedLots", lots.filter(l => l.transaction_status === "accepted" || l.status === "accepted").length);
+
+      document.getElementById("adminStatus").textContent = "Administrator access verified.";
+      document.getElementById("dashboard").hidden = false;
+      render();
+      renderLots();
+      renderHandovers();
+    } catch (err) {
+      document.getElementById("adminStatus").textContent = err.message;
+      setTimeout(() => location.href = "login.html", 1500);
+    }
+  }
+
+  document.getElementById("search").addEventListener("input", render);
+  document.getElementById("role").addEventListener("change", render);
+  document.getElementById("refreshBtn").addEventListener("click", load);
+  document.getElementById("logoutLink").addEventListener("click", async e => {
+    e.preventDefault();
+    try { await api("/auth/logout", {method:"POST", body:"{}"}); } catch (_) {}
+    location.href = "login.html";
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

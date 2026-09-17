@@ -1,0 +1,13 @@
+{
+  "name": "urban-mining-connect-node",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Urban Mining Connect frontend + pure Node.js backend",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

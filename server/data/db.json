@@ -1,0 +1,202 @@
+{
+  "materials": [
+    {
+      "id": "iron",
+      "group": "Ferrous",
+      "name": "Iron",
+      "icon": "🔩",
+      "rate": 38,
+      "unit": "kg",
+      "trend": "up",
+      "delta": "+₹2",
+      "source_type": "seed"
+    },
+    {
+      "id": "steel",
+      "group": "Ferrous",
+      "name": "Steel",
+      "icon": "🏗️",
+      "rate": 42,
+      "unit": "kg",
+      "trend": "flat",
+      "delta": "steady",
+      "source_type": "seed"
+    },
+    {
+      "id": "aluminium",
+      "group": "Non-Ferrous",
+      "name": "Aluminium",
+      "icon": "🥫",
+      "rate": 155,
+      "unit": "kg",
+      "trend": "up",
+      "delta": "+₹5",
+      "source_type": "seed"
+    },
+    {
+      "id": "copper",
+      "group": "Non-Ferrous",
+      "name": "Copper",
+      "icon": "🟠",
+      "rate": 690,
+      "unit": "kg",
+      "trend": "up",
+      "delta": "+₹12",
+      "source_type": "seed"
+    },
+    {
+      "id": "brass",
+      "group": "Non-Ferrous",
+      "name": "Brass",
+      "icon": "🟡",
+      "rate": 510,
+      "unit": "kg",
+      "trend": "flat",
+      "delta": "steady",
+      "source_type": "seed"
+    },
+    {
+      "id": "lithium",
+      "group": "Critical Minerals",
+      "name": "Lithium-bearing battery",
+      "icon": "🔋",
+      "rate": 125,
+      "unit": "kg",
+      "trend": "up",
+      "delta": "+₹4",
+      "source_type": "seed"
+    },
+    {
+      "id": "magnet",
+      "group": "Critical Minerals",
+      "name": "Magnet / rare-earth bearing",
+      "icon": "🧲",
+      "rate": 180,
+      "unit": "kg",
+      "trend": "flat",
+      "delta": "indicative",
+      "source_type": "seed"
+    },
+    {
+      "id": "pcb",
+      "group": "E-Waste",
+      "name": "PCB",
+      "icon": "🟩",
+      "rate": 310,
+      "unit": "kg",
+      "trend": "up",
+      "delta": "+₹8",
+      "source_type": "seed"
+    },
+    {
+      "id": "cable",
+      "group": "E-Waste",
+      "name": "Copper cable & wire",
+      "icon": "🔌",
+      "rate": 265,
+      "unit": "kg",
+      "trend": "up",
+      "delta": "+₹6",
+      "source_type": "seed"
+    },
+    {
+      "id": "panel",
+      "group": "E-Waste",
+      "name": "LCD / LED panel",
+      "icon": "🖥️",
+      "rate": 72,
+      "unit": "kg",
+      "trend": "flat",
+      "delta": "steady",
+      "source_type": "seed"
+    },
+    {
+      "id": "battery",
+      "group": "E-Waste",
+      "name": "Battery",
+      "icon": "🔋",
+      "rate": 92,
+      "unit": "kg",
+      "trend": "down",
+      "delta": "−₹3",
+      "source_type": "seed"
+    },
+    {
+      "id": "mixedmetal",
+      "group": "Mixed Scrap",
+      "name": "Mixed metal",
+      "icon": "🧰",
+      "rate": 55,
+      "unit": "kg",
+      "trend": "flat",
+      "delta": "steady",
+      "source_type": "seed"
+    }
+  ],
+  "facilities": [
+    {
+      "id": "FAC-GREENLOOP",
+      "name": "GreenLoop Materials",
+      "type": "Authorized Recycler",
+      "dist": "8 km",
+      "rate": 320,
+      "auth": "Authorization verified",
+      "score": 96,
+      "pickup": true,
+      "materials": "E-waste • PCB • Cable",
+      "authorization_status": "active"
+    },
+    {
+      "id": "FAC-SHAKTI",
+      "name": "Shakti Metal Recovery",
+      "type": "Authorized Processor",
+      "dist": "12 km",
+      "rate": 48,
+      "auth": "Authorization verified",
+      "score": 92,
+      "pickup": true,
+      "materials": "Iron • Steel • Aluminium",
+      "authorization_status": "active"
+    },
+    {
+      "id": "FAC-URBANMET",
+      "name": "UrbanMet Secondarys",
+      "type": "Aggregator",
+      "dist": "5 km",
+      "rate": 44,
+      "auth": "Registration verified",
+      "score": 88,
+      "pickup": false,
+      "materials": "Ferrous • Mixed metal",
+      "authorization_status": "active"
+    },
+    {
+      "id": "FAC-CIRCULAR",
+      "name": "Circular Minerals Hub",
+      "type": "Authorized Processor",
+      "dist": "21 km",
+      "rate": 710,
+      "auth": "Authorization verified",
+      "score": 94,
+      "pickup": true,
+      "materials": "Copper • Critical mineral streams",
+      "authorization_status": "active"
+    }
+  ],
+  "users": [
+    {
+      "id": "USR-ADMIN",
+      "name": "Urban Mining Admin",
+      "email": "admin@urbanmining.local",
+      "phone": "",
+      "role": "admin",
+      "password_salt": "21b80b6083231e25a116a52f4d402ee2",
+      "password_hash": "ac64fcce94c5d18cec8348ee8a38dd169093a439498b50a6a0fbfd340a804d8dc39585d20906cc159b71e3aabdfb8f7a2a80e1d6864f6634c159de4002911a2f",
+      "created": "2026-09-17T04:16:53.727Z",
+      "active": true
+    }
+  ],
+  "lots": [],
+  "handovers": [],
+  "events": []
+}
