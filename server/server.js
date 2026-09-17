@@ -84,8 +84,8 @@ async function api(req,res,url){
  if(req.method==='GET'&&p==='/api/auth/me')return json(req,res,200,{user:publicUser(currentUser(req))});
  if(req.method==='GET'&&p==='/api/bootstrap'){const u=currentUser(req);const lots=u&&u.role==='collector'?db.lots.filter(l=>l.user_id===u.id):[];return json(req,res,200,{materials:db.materials,facilities:db.facilities,lots,profile:u&&u.role==='collector'?{collector_id:u.collector_id,name:u.name,preferred_language:u.preferred_language||'Hindi',operating_area:u.operating_area||'Demo area'}:null,user:publicUser(u)});}
  if(req.method==='GET'&&p==='/api/materials')return json(req,res,200,db.materials);
- iif(req.method==='GET'&&p==='/api/buyers'){
-const u=requireUser(req,res,'collector');
+ if(req.method==='GET'&&p==='/api/buyers'){
+ const u=requireUser(req,res,'collector');
 if(!u)return;
 
 const buyers=db.users
