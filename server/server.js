@@ -84,7 +84,65 @@ async function api(req,res,url){
  if(req.method==='GET'&&p==='/api/auth/me')return json(req,res,200,{user:publicUser(currentUser(req))});
  if(req.method==='GET'&&p==='/api/bootstrap'){const u=currentUser(req);const lots=u&&u.role==='collector'?db.lots.filter(l=>l.user_id===u.id):[];return json(req,res,200,{materials:db.materials,facilities:db.facilities,lots,profile:u&&u.role==='collector'?{collector_id:u.collector_id,name:u.name,preferred_language:u.preferred_language||'Hindi',operating_area:u.operating_area||'Demo area'}:null,user:publicUser(u)});}
  if(req.method==='GET'&&p==='/api/materials')return json(req,res,200,db.materials);
- if(req.method==='GET'&&p==='/api/facilities')return json(req,res,200,db.facilities.filter(f=>f.authorization_status==='active'));
+ iif(req.method==='GET'&&p==='/api/buyers'){
+const u=requireUser(req,res,'collector');
+if(!u)return;
+
+const buyers=db.users
+.filter(x=>x.role==='buyer'&&x.active!==false)
+.map(x=>{
+const facility=db.facilities.find(f=>f.id===x.facility_id);
+return {
+id:x.id,
+name:x.name,
+email:x.email,
+phone:x.phone||'',
+facility_id:x.facility_id||null,
+facility_name:facility?.name||'Registered Buyer',
+created:x.created
+};
+});
+
+return json(req,res,200,{buyers});
+}
+  if(req.method==='GET'&&p.startsWith('/api/lots/')&&p.endsWith('/quotes')){
+const u=requireUser(req,res,'collector');
+if(!u)return;
+
+const lotId=decodeURIComponent(
+p.slice('/api/lots/'.length,-'/quotes'.length)
+);
+
+const lot=db.lots.find(l=>
+l.id===lotId&&
+l.user_id===u.id
+);
+
+if(!lot){
+return json(req,res,404,{error:'Lot not found'});
+}
+
+const quotes=(lot.events||[])
+.filter(e=>e.type==='buyer_quote')
+.map(e=>{
+const buyer=db.users.find(x=>x.id===e.by);
+const facility=buyer?
+db.facilities.find(f=>f.id===buyer.facility_id):
+null;
+
+return {
+buyer_id:e.by,
+buyer_name:buyer?.name||lot.buyer_name||'Buyer',
+buyer_email:buyer?.email||'',
+facility_id:buyer?.facility_id||null,
+facility_name:facility?.name||'',
+rate:Number(e.rate||0),
+at:e.at
+};
+});
+
+return json(req,res,200,{lot,quotes});
+}
  if(req.method==='GET'&&p==='/api/lots'){const u=requireUser(req,res,'collector');if(!u)return;return json(req,res,200,db.lots.filter(l=>l.user_id===u.id));}
  if(req.method==='POST'&&p==='/api/lots'){
   const u=requireUser(req,res,'collector');if(!u)return;const x=await body(req);const m=db.materials.find(a=>a.id===x.category)||db.materials.find(a=>a.name===x.name);if(!m)return json(req,res,400,{error:'Unknown material'});const weight=Number(x.weight);if(!Number.isFinite(weight)||weight<=0)return json(req,res,400,{error:'Weight must be greater than zero'});const lot={id:x.id||id(),user_id:u.id,collector_id:u.collector_id,category:m.id,group:m.group,name:m.name,weight,rate:Number(x.rate)||m.rate,status:'created',created:x.created||new Date().toISOString(),photo_ref:null,quoted_price:null,facility_id:null,payment_status:'pending',transaction_status:'open',events:[]};if(x.photoData&&typeof x.photoData==='string'&&x.photoData.startsWith('data:image/')){const mt=x.photoData.match(/^data:image\/(png|jpeg|jpg|webp);base64,/i);if(mt){const ext=mt[1]==='jpeg'?'jpg':mt[1];const file=lot.id+'.'+ext;fs.writeFileSync(path.join(UP,file),Buffer.from(x.photoData.split(',')[1],'base64'));lot.photo_ref='/server/data/uploads/'+file}}lot.events.push({type:'captured',at:new Date().toISOString(),by:u.id});db.lots.unshift(lot);persist();return json(req,res,201,lot)}
@@ -93,7 +151,45 @@ async function api(req,res,url){
   const u=requireUser(req,res,'collector');if(!u)return;const x=await body(req);const lot=db.lots.find(l=>l.id===x.lot_id&&l.user_id===u.id)||db.lots.find(l=>l.user_id===u.id);if(!lot)return json(req,res,400,{error:'No lot available'});const buyer=x.facility_id?db.facilities.find(f=>f.name===x.facility_id||f.id===x.facility_id):db.facilities[0];const now=new Date().toISOString();const h={handover_id:id('HO'),lot_id:lot.id,collector_id:u.collector_id,facility_id:buyer?.id||'FAC-GREENLOOP',facility_name:buyer?.name||'GreenLoop Materials',weight:lot.weight,quoted_price:x.quoted_price??lot.rate,final_price:x.final_price??x.quoted_price??lot.rate,confirmed_at:now,payment_status:x.payment_status||'pending',reference:crypto.randomBytes(3).toString('hex').toUpperCase(),append_only:true};db.handovers.push(h);lot.status='confirmed';lot.transaction_status='completed';lot.facility_id=h.facility_id;lot.quoted_price=h.quoted_price;lot.final_price=h.final_price;lot.payment_status=h.payment_status;lot.handover_at=now;lot.events.push({type:'handover_confirmed',at:now,reference:h.reference,by:u.id});persist();return json(req,res,201,h)}
  if(req.method==='GET'&&p==='/api/earnings'){const u=requireUser(req,res,'collector');if(!u)return;const tx=db.lots.filter(l=>l.user_id===u.id&&l.transaction_status==='completed');const paid=tx.filter(l=>l.payment_status==='paid').reduce((a,l)=>a+(l.final_price||l.rate)*l.weight,0);const pending=tx.filter(l=>l.payment_status!=='paid').reduce((a,l)=>a+(l.final_price||l.rate)*l.weight,0);return json(req,res,200,{earned:paid,pending,average:tx.length?tx.reduce((a,l)=>a+(l.final_price||l.rate)*l.weight,0)/tx.length:0,lots:tx})}
  if(req.method==='GET'&&p==='/api/recovery'){const u=requireUser(req,res,'collector');if(!u)return;const lots=db.lots.filter(l=>l.user_id===u.id),captured=lots.reduce((a,l)=>a+l.weight,0),recovered=lots.filter(l=>l.transaction_status==='completed').reduce((a,l)=>a+l.weight,0);const by={};for(const l of lots.filter(l=>l.transaction_status==='completed'))by[l.group]=(by[l.group]||0)+l.weight;return json(req,res,200,{captured,recovered,traceable:lots.length?Math.round(lots.filter(l=>l.transaction_status==='completed').length/lots.length*100):0,authorizedRoute:lots.length?Math.round(lots.filter(l=>l.facility_id).length/lots.length*100):0,by})}
- if(req.method==='GET'&&p==='/api/console'){const u=requireUser(req,res,'buyer');if(!u)return;const facility=db.facilities.find(f=>f.id===u.facility_id)||db.facilities.find(f=>f.authorization_status==='active')||db.facilities[0];const incoming=db.lots.filter(l=>l.transaction_status==='open'||l.transaction_status==='quoted'||l.transaction_status==='accepted');const awaitingQuote=incoming.filter(l=>l.quoted_price==null).length;const acceptedByMe=db.lots.filter(l=>l.buyer_id===u.id&&l.transaction_status==='accepted').length;return json(req,res,200,{incoming,awaitingQuote,acceptedByMe,confirmedToday:db.lots.filter(l=>l.transaction_status==='completed'&&l.facility_id===facility?.id).length,facilities:db.facilities,facility,traceability:db.lots.length?Math.round(db.lots.filter(l=>l.transaction_status==='completed').length/db.lots.length*100):0,buyer:publicUser(u)});}
+ if(req.method==='GET'&&p==='/api/console'){
+const u=requireUser(req,res,'buyer');
+if(!u)return;
+
+const facility=db.facilities.find(f=>f.id===u.facility_id)||
+db.facilities.find(f=>f.authorization_status==='active')||
+db.facilities[0];
+
+const incoming=db.lots.filter(l=>
+l.transaction_status==='open'||
+l.transaction_status==='quoted'||
+l.transaction_status==='accepted'
+);
+
+const awaitingQuote=incoming.filter(l=>l.quoted_price==null).length;
+
+const acceptedByMe=db.lots.filter(l=>
+l.buyer_id===u.id&&
+l.transaction_status==='accepted'
+).length;
+
+return json(req,res,200,{
+incoming,
+awaitingQuote,
+acceptedByMe,
+confirmedToday:db.lots.filter(l=>
+l.transaction_status==='completed'&&
+l.facility_id===facility?.id
+).length,
+facilities:db.facilities,
+facility,
+traceability:db.lots.length?
+Math.round(
+db.lots.filter(l=>l.transaction_status==='completed').length/
+db.lots.length*100
+):0,
+buyer:publicUser(u)
+});
+}
  if(req.method==='POST'&&p==='/api/console/quote'){const u=requireUser(req,res,'buyer');if(!u)return;const x=await body(req);const rate=Number(x.rate);if(!Number.isFinite(rate)||rate<=0)return json(req,res,400,{error:'Quote rate must be greater than zero'});const lot=db.lots.find(l=>l.id===x.lot_id);if(!lot)return json(req,res,404,{error:'Lot not found'});if(lot.transaction_status==='completed')return json(req,res,409,{error:'Lot is already completed'});const facility=db.facilities.find(f=>f.id===u.facility_id)||db.facilities.find(f=>f.authorization_status==='active')||db.facilities[0];lot.quoted_price=rate;lot.buyer_id=u.id;lot.buyer_name=u.name;lot.facility_id=facility?.id||null;lot.facility_name=facility?.name||null;lot.transaction_status='quoted';lot.events=lot.events||[];lot.events.push({type:'buyer_quote',at:new Date().toISOString(),by:u.id,rate});persist();return json(req,res,200,lot);}
  if(req.method==='POST'&&p==='/api/console/accept'){const u=requireUser(req,res,'buyer');if(!u)return;const x=await body(req);const lot=db.lots.find(l=>l.id===x.lot_id);if(!lot)return json(req,res,404,{error:'Lot not found'});if(lot.transaction_status==='completed')return json(req,res,409,{error:'Lot is already completed'});const facility=db.facilities.find(f=>f.id===u.facility_id)||db.facilities.find(f=>f.authorization_status==='active')||db.facilities[0];lot.buyer_id=u.id;lot.buyer_name=u.name;lot.facility_id=facility?.id||null;lot.facility_name=facility?.name||null;lot.quoted_price=Number(lot.quoted_price||lot.rate);lot.final_price=Number(lot.final_price||lot.quoted_price);lot.transaction_status='accepted';lot.status='accepted';lot.events=lot.events||[];lot.events.push({type:'buyer_accepted',at:new Date().toISOString(),by:u.id});persist();return json(req,res,200,lot);}
  if(req.method==='GET'&&p==='/api/profile'){const u=requireUser(req,res,'collector');if(!u)return;return json(req,res,200,{collector_id:u.collector_id,name:u.name,preferred_language:u.preferred_language||'Hindi',operating_area:u.operating_area||'Demo area'});}
