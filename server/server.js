@@ -145,6 +145,30 @@ async function api(req,res,url){
   return json(req,res,201,{quote:{id:q.id,rate:q.rate,available_kg:q.available_kg,status:q.status,image_ref:q.image_ref}});
  }
 
+ // Buyer accepts or rejects an individual collector offer on a sourcing request.
+ if(req.method==='POST'&&p==='/api/buyer/needs/quote-action'){
+  const u=requireUser(req,res,'buyer');if(!u)return;
+  const x=await body(req),action=String(x.action||'');
+  if(!['accept','reject'].includes(action))return json(req,res,400,{error:'Choose accept or reject'});
+  const need=(db.buyer_needs||[]).find(n=>n.id===String(x.need_id||'')&&n.buyer_id===u.id);
+  if(!need)return json(req,res,404,{error:'Sourcing request not found'});
+  const q=(need.quotes||[]).find(q=>q.id===String(x.quote_id||''));
+  if(!q)return json(req,res,404,{error:'Collector offer not found'});
+  if(need.status!=='open')return json(req,res,409,{error:'This sourcing request is no longer open'});
+  if(q.status!=='pending')return json(req,res,409,{error:'This offer has already been actioned'});
+  const now=new Date().toISOString();
+  if(action==='accept'){
+   q.status='accepted';need.status='accepted';need.accepted_quote_id=q.id;need.accepted_collector_id=q.collector_id;
+   for(const other of (need.quotes||[]))if(other.id!==q.id&&other.status==='pending'){other.status='rejected';other.updated_at=now;}
+   notify(q.collector_id,'buyer_need_quote_accepted','Your offer was accepted',`${u.name||'The buyer'} accepted your ₹${Number(q.rate||0)}/kg offer for ${need.material_name}.`,{need_id:need.id,quote_id:q.id});
+  }else{
+   q.status='rejected';
+   notify(q.collector_id,'buyer_need_quote_rejected','Your offer was declined',`${u.name||'The buyer'} declined your offer for ${need.material_name}.`,{need_id:need.id,quote_id:q.id});
+  }
+  q.updated_at=now;need.updated_at=now;need.events=need.events||[];need.events.push({type:action==='accept'?'buyer_need_offer_accepted':'buyer_need_offer_rejected',by:u.id,quote_id:q.id,at:now});
+  persist();return json(req,res,200,{need_id:need.id,status:need.status,quote:{id:q.id,status:q.status}});
+ }
+
  // A dedicated inbox API keeps Messenger independent from the Buyer Console's
  // {incoming: [...]} dashboard response and includes past/accepted conversations.
  if(req.method==='GET'&&p==='/api/messenger/inbox'){
