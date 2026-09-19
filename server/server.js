@@ -114,25 +114,35 @@ async function api(req,res,url){
  }
  if(req.method==='GET'&&p==='/api/marketplace/buyer-needs'){
   const u=requireUser(req,res,'collector');if(!u)return;
-  const needs=(db.buyer_needs||[]).filter(n=>n.status==='open').map(n=>({id:n.id,buyer_name:n.buyer_name,material_id:n.material_id,material_name:n.material_name,group:n.group,quantity_kg:n.quantity_kg,target_rate:n.target_rate,condition:n.condition,needed_by:n.needed_by,delivery_area:n.delivery_area,notes:n.notes,created_at:n.created_at,quote_count:(n.quotes||[]).length}));
+  const needs=(db.buyer_needs||[]).filter(n=>n.status==='open'&&n.buyer_id!==u.id).map(n=>({id:n.id,buyer_name:n.buyer_name,material_id:n.material_id,material_name:n.material_name,group:n.group,quantity_kg:n.quantity_kg,target_rate:n.target_rate,condition:n.condition,needed_by:n.needed_by,delivery_area:n.delivery_area,notes:n.notes,created_at:n.created_at,quote_count:(n.quotes||[]).length,own_quote:(n.quotes||[]).find(q=>q.collector_id===u.id)||null}));
   return json(req,res,200,{needs});
  }
  if(req.method==='POST'&&p==='/api/marketplace/buyer-needs/quote'){
   const u=requireUser(req,res,'collector');if(!u)return;
-  const x=await body(req),rate=Number(x.rate);
+  const x=await body(req),rate=Number(x.rate),available=Number(x.available_kg);
   if(!x.need_id)return json(req,res,400,{error:'Buyer need ID is required'});
   if(!Number.isFinite(rate)||rate<=0)return json(req,res,400,{error:'Enter a valid quote rate'});
+  if(!Number.isFinite(available)||available<=0)return json(req,res,400,{error:'Enter available quantity'});
   const need=(db.buyer_needs||[]).find(n=>n.id===String(x.need_id));
   if(!need)return json(req,res,404,{error:'Buyer need not found'});
   if(need.status!=='open')return json(req,res,409,{error:'This buyer need is no longer open'});
+  const data=String(x.photoData||'');
+  const match=data.match(/^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=]+)$/i);
+  if(!match)return json(req,res,400,{error:'Upload a material photo to submit your quote'});
+  const bytes=Buffer.from(match[2],'base64');
+  if(!bytes.length||bytes.length>7*1024*1024)return json(req,res,400,{error:'Photo must be smaller than 7 MB'});
+  const ext=match[1].toLowerCase()==='jpeg'?'jpg':match[1].toLowerCase();
   need.quotes=need.quotes||[];
   let q=need.quotes.find(q=>q.collector_id===u.id);
   const now=new Date().toISOString();
-  if(q){q.rate=rate;q.status='pending';q.updated_at=now;}
-  else {q={id:id('NQ'),collector_id:u.id,collector_name:u.name,rate,status:'pending',created_at:now,updated_at:now};need.quotes.push(q);}
+  const quoteId=q?.id||id('NQ');
+  const filename=quoteId+'.'+ext;
+  fs.writeFileSync(path.join(UP,filename),bytes);
+  if(q){q.rate=rate;q.available_kg=available;q.message=safeText(x.message||'');q.image_ref='/server/data/uploads/'+filename;q.status='pending';q.updated_at=now;}
+  else {q={id:quoteId,collector_id:u.id,collector_name:u.name,rate,available_kg:available,message:safeText(x.message||''),image_ref:'/server/data/uploads/'+filename,status:'pending',created_at:now,updated_at:now};need.quotes.push(q);}
   need.updated_at=now;persist();
-  notify(need.buyer_id,'buyer_need_quote','New quote for your buyer need',`${u.name||'A collector'} quoted ₹${rate}/kg for your ${need.material_name} requirement.`,{need_id:need.id,quote_id:q.id});
-  return json(req,res,201,{quote:{id:q.id,rate:q.rate,status:q.status}});
+  notify(need.buyer_id,'buyer_need_quote','New quote for your sourcing request',`${u.name||'A collector'} offered ₹${rate}/kg for ${available} kg of ${need.material_name}. View the offer and photo in your Sourcing Hub.`,{need_id:need.id,quote_id:q.id});
+  return json(req,res,201,{quote:{id:q.id,rate:q.rate,available_kg:q.available_kg,status:q.status,image_ref:q.image_ref}});
  }
 
  // A dedicated inbox API keeps Messenger independent from the Buyer Console's
