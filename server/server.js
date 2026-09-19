@@ -1,4 +1,5 @@
 const http=require('http');const fs=require('fs');const path=require('path');const crypto=require('crypto');
+let nodemailer=null;try{nodemailer=require('nodemailer')}catch{}
 const ROOT=path.join(__dirname,'..');const DATA=path.join(__dirname,'data');const DB=path.join(DATA,'db.json');const UP=path.join(DATA,'uploads');
 fs.mkdirSync(UP,{recursive:true});
 
@@ -24,12 +25,23 @@ const seedFacilities=[
 
 function load(){
  if(!fs.existsSync(DB)){const x={materials:seedMaterials,facilities:seedFacilities,users:[],lots:[],handovers:[],events:[]};fs.writeFileSync(DB,JSON.stringify(x,null,2));return x}
- const x=JSON.parse(fs.readFileSync(DB,'utf8'));x.materials??=seedMaterials;x.facilities??=seedFacilities;x.users??=[];x.lots??=[];x.handovers??=[];x.events??=[];
+ const x=JSON.parse(fs.readFileSync(DB,'utf8'));x.materials??=seedMaterials;x.facilities??=seedFacilities;x.users??=[];x.lots??=[];x.handovers??=[];x.events??=[];x.notifications??=[];
  return x;
 }
 let db=load();
 
 function persist(){fs.writeFileSync(DB,JSON.stringify(db,null,2))}
+function safeText(v){return String(v??'').replace(/[<>]/g,'').slice(0,500)}
+async function sendEmail(to,subject,text){
+ if(!to||!process.env.SMTP_HOST||!process.env.SMTP_USER||!process.env.SMTP_PASS||!nodemailer)return {sent:false,reason:'SMTP is not configured'};
+ try{const transporter=nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE||'false')==='true',auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS}});await transporter.sendMail({from:process.env.SMTP_FROM||process.env.SMTP_USER,to,subject,text});return {sent:true}}
+ catch(e){console.error('Notification email failed:',e.message);return {sent:false,reason:e.message}}
+}
+function notify(userId,type,title,message,meta={}){
+ if(!userId)return;const n={id:id('NTF'),user_id:userId,type,title:safeText(title),message:safeText(message),meta,created_at:new Date().toISOString(),read:false,email_status:'pending'};
+ db.notifications=db.notifications||[];db.notifications.unshift(n);persist();const user=db.users.find(u=>u.id===userId);
+ sendEmail(user?.email,`Urban Mining Connect: ${n.title}`,`${n.message}\n\nSign in to Urban Mining Connect to view details.`).then(result=>{n.email_status=result.sent?'sent':'not_configured_or_failed';persist()});
+}
 function ensureDemoAdmin(){
  if(!db.users.some(u=>u.role==='admin')){
   const hp=hashPassword('Admin@12345');
@@ -120,6 +132,15 @@ async function api(req,res,url){
  }
  if(req.method==='POST'&&p==='/api/auth/logout'){const sid=cookies(req).um_session;if(sid)sessions.delete(sid);return json(req,res,200,{ok:true},{'Set-Cookie':sessionCookie(req,'',0)})}
  if(req.method==='GET'&&p==='/api/auth/me')return json(req,res,200,{user:publicUser(currentUser(req))});
+ if(req.method==='GET'&&p==='/api/notifications'){
+  const u=requireUser(req,res);if(!u)return;const items=(db.notifications||[]).filter(n=>n.user_id===u.id).slice(0,100);return json(req,res,200,{notifications:items,unread:items.filter(n=>!n.read).length,emailConfigured:!!(process.env.SMTP_HOST&&process.env.SMTP_USER&&process.env.SMTP_PASS&&nodemailer)});
+ }
+ if(req.method==='POST'&&p==='/api/notifications/read-all'){
+  const u=requireUser(req,res);if(!u)return;for(const n of (db.notifications||[]))if(n.user_id===u.id)n.read=true;persist();return json(req,res,200,{ok:true});
+ }
+ if(req.method==='POST'&&p==='/api/notifications/read'){
+  const u=requireUser(req,res);if(!u)return;const x=await body(req);const n=(db.notifications||[]).find(n=>n.id===x.id&&n.user_id===u.id);if(!n)return json(req,res,404,{error:'Notification not found'});n.read=true;persist();return json(req,res,200,{ok:true});
+ }
  if(req.method==='GET'&&p==='/api/bootstrap'){const u=currentUser(req);const lots=u&&u.role==='collector'?db.lots.filter(l=>l.user_id===u.id):[];return json(req,res,200,{materials:db.materials,facilities:db.facilities,lots,profile:u&&u.role==='collector'?{collector_id:u.collector_id,name:u.name,preferred_language:u.preferred_language||'Hindi',operating_area:u.operating_area||'Demo area'}:null,user:publicUser(u)})}
  if(req.method==='GET'&&p==='/api/materials')return json(req,res,200,db.materials);
 
@@ -190,7 +211,7 @@ async function api(req,res,url){
   normalizeQuotes(lot);const selected=lot.quotes.find(q=>q.id===x.quote_id&&q.status==='accepted');const buyerFacility=selected?db.facilities.find(f=>f.id===selected.facility_id):null;
   const buyer=x.facility_id?db.facilities.find(f=>f.name===x.facility_id||f.id===x.facility_id):buyerFacility||db.facilities[0];const now=new Date().toISOString();
   const price=Number(x.final_price??selected?.rate??x.quoted_price??lot.rate);const h={handover_id:id('HO'),lot_id:lot.id,collector_id:u.collector_id,facility_id:buyer?.id||'FAC-GREENLOOP',facility_name:buyer?.name||'GreenLoop Materials',weight:lot.weight,quoted_price:Number(selected?.rate??x.quoted_price??lot.rate),final_price:price,confirmed_at:now,payment_status:x.payment_status||'pending',reference:crypto.randomBytes(3).toString('hex').toUpperCase(),append_only:true};
-  db.handovers.push(h);lot.status='confirmed';lot.transaction_status='completed';lot.facility_id=h.facility_id;lot.quoted_price=h.quoted_price;lot.final_price=h.final_price;lot.payment_status=h.payment_status;lot.handover_at=now;lot.events.push({type:'handover_confirmed',at:now,reference:h.reference,by:u.id});persist();return json(req,res,201,h);
+  db.handovers.push(h);if(lot.buyer_id)notify(lot.buyer_id,'handover_confirmed','Handover confirmed',`Handover for ${lot.name||'your accepted lot'} has been confirmed.`,{lot_id:lot.id,handover_id:h.handover_id});if(x.scheduled_at){h.scheduled_at=x.scheduled_at;notify(lot.user_id,'handover_scheduled','Handover reminder',`Handover is scheduled for ${new Date(x.scheduled_at).toLocaleString('en-IN')}.`,{lot_id:lot.id,handover_id:h.handover_id});}lot.status='confirmed';lot.transaction_status='completed';lot.facility_id=h.facility_id;lot.quoted_price=h.quoted_price;lot.final_price=h.final_price;lot.payment_status=h.payment_status;lot.handover_at=now;lot.events.push({type:'handover_confirmed',at:now,reference:h.reference,by:u.id});persist();return json(req,res,201,h);
  }
 
  if(req.method==='GET'&&p==='/api/earnings'){const u=requireUser(req,res,'collector');if(!u)return;const tx=db.lots.filter(l=>l.user_id===u.id&&l.transaction_status==='completed');const paid=tx.filter(l=>l.payment_status==='paid').reduce((a,l)=>a+(l.final_price||l.rate)*l.weight,0);const pending=tx.filter(l=>l.payment_status!=='paid').reduce((a,l)=>a+(l.final_price||l.rate)*l.weight,0);return json(req,res,200,{earned:paid,pending,average:tx.length?tx.reduce((a,l)=>a+(l.final_price||l.rate)*l.weight,0)/tx.length:0,lots:tx})}
@@ -212,7 +233,7 @@ async function api(req,res,url){
   if(q&&['accepted'].includes(q.status))return json(req,res,409,{error:'Your quote is already accepted'});
   const now=new Date().toISOString();
   if(q){q.rate=rate;q.counter_rate=null;q.status='pending';q.updated_at=now}else{q={id:id('QT'),buyer_id:u.id,buyer_name:u.name,buyer_email:u.email,facility_id:facility?.id||null,facility_name:facility?.name||'',rate,status:'pending',created_at:now,updated_at:now};lot.quotes.push(q)}
-  lot.transaction_status=lot.transaction_status==='open'?'negotiating':lot.transaction_status;lot.events=lot.events||[];lot.events.push({type:'buyer_quote',at:now,by:u.id,quote_id:q.id,rate});persist();return json(req,res,200,{lot,quote:quoteView(q)});
+  lot.transaction_status=lot.transaction_status==='open'?'negotiating':lot.transaction_status;lot.events=lot.events||[];lot.events.push({type:'buyer_quote',at:now,by:u.id,quote_id:q.id,rate});notify(lot.user_id,'new_quote','New quote received',`${u.name||'A buyer'} offered ₹${rate}/kg for your ${lot.name||'material'} lot.`,{lot_id:lot.id,quote_id:q.id});persist();return json(req,res,200,{lot,quote:quoteView(q)});
  }
 
  if(req.method==='POST'&&p==='/api/console/quote/withdraw'){
@@ -233,14 +254,14 @@ async function api(req,res,url){
    q.status='accepted';q.rate=Number(q.counter_rate??q.rate);q.counter_rate=null;q.updated_at=now;
    for(const other of lot.quotes)if(other.id!==q.id&&['pending','countered'].includes(other.status)){other.status='rejected';other.updated_at=now}
    lot.buyer_id=q.buyer_id;lot.buyer_name=q.buyer_name;lot.facility_id=q.facility_id;lot.facility_name=q.facility_name;lot.quoted_price=q.rate;lot.final_price=q.rate;lot.transaction_status='accepted';lot.status='accepted';
-   lot.events.push({type:'collector_quote_accepted',at:now,by:u.id,quote_id:q.id,rate:q.rate});
+   lot.events.push({type:'collector_quote_accepted',at:now,by:u.id,quote_id:q.id,rate:q.rate});notify(q.buyer_id,'quote_accepted','Quote accepted',`Your ${lot.name||'material'} lot has been accepted at ₹${q.rate}/kg.`,{lot_id:lot.id,quote_id:q.id});
   }else if(action==='reject'){
    if(q.status==='accepted')return json(req,res,409,{error:'An accepted quote cannot be rejected'});
    q.status='rejected';q.updated_at=now;lot.events.push({type:'collector_quote_rejected',at:now,by:u.id,quote_id:q.id});
   }else if(action==='counter'){
    const rate=Number(x.rate);if(!Number.isFinite(rate)||rate<=0)return json(req,res,400,{error:'Counter rate must be greater than zero'});
    if(q.status==='accepted'||q.status==='rejected')return json(req,res,409,{error:'This quote cannot be countered'});
-   q.counter_rate=rate;q.status='countered';q.updated_at=now;lot.transaction_status='negotiating';lot.events.push({type:'collector_counter',at:now,by:u.id,quote_id:q.id,rate});
+   q.counter_rate=rate;q.status='countered';q.updated_at=now;lot.transaction_status='negotiating';lot.events.push({type:'collector_counter',at:now,by:u.id,quote_id:q.id,rate});notify(q.buyer_id,'counter_offer','New counter-offer',`${u.name||'The collector'} countered ₹${rate}/kg for ${lot.name||'your quoted lot'}.`,{lot_id:lot.id,quote_id:q.id});
   }else return json(req,res,400,{error:'Unknown quote action'});
   persist();return json(req,res,200,{lot,quote:quoteView(q)});
  }
@@ -267,6 +288,7 @@ function adminDashboard(req,res,user){
  return json(req,res,200,{users,lots,handovers:db.handovers||[],stats:{totalUsers:users.length,collectors:users.filter(u=>u.role==='collector').length,buyers:users.filter(u=>u.role==='buyer'||u.role==='recycler').length,admins:users.filter(u=>u.role==='admin').length,totalLots:lots.length,openLots:lots.length-completed.length,completedLots:completed.length,totalWeightKg:weightKg,completedValue,facilities:(db.facilities||[]).length}});
 }
 
+setInterval(()=>{try{const now=Date.now();for(const h of (db.handovers||[])){if(!h.scheduled_at||h.reminder_sent)continue;const when=Date.parse(h.scheduled_at);if(Number.isFinite(when)&&when>now&&when-now<=24*60*60*1000){const lot=db.lots.find(l=>l.id===h.lot_id);if(lot){notify(lot.user_id,'handover_reminder','Handover reminder','Handover scheduled for tomorrow.',{lot_id:lot.id,handover_id:h.handover_id});h.reminder_sent=true;persist();}}}}catch(e){console.error('Reminder sweep:',e.message)}},60*60*1000).unref();
 const server=http.createServer(async(req,res)=>{
  try{
   if(req.method==='OPTIONS'){res.writeHead(204,{...corsHeaders(req),'Access-Control-Allow-Methods':'GET,POST,PUT,OPTIONS','Access-Control-Allow-Headers':'Content-Type'});return res.end()}
