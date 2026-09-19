@@ -210,20 +210,35 @@ if(typeof shell==='function') shell('Buyer Needs');
       updatePreview();
     },0);
   });
-  $('buyerNeedForm').addEventListener('submit',e=>{
+  $('buyerNeedForm').addEventListener('submit',async e=>{
     e.preventDefault();
     if(!selected){$('formMessage').textContent='Please select a material first.';return;}
-    const need={
-      material_id:selected,material_name:materialNames[selected][0],group:materialNames[selected][1],
-      quantity_kg:Number($('quantity').value),target_rate:$('targetRate').value?Number($('targetRate').value):null,
-      condition:$('condition').value,needed_by:$('neededBy').value||null,
-      delivery_area:$('deliveryArea').value.trim(),notes:$('notes').value.trim(),
-      created_at:new Date().toISOString(),status:'draft'
+    const payload={
+      material_id:selected,
+      quantity_kg:Number($('quantity').value),
+      target_rate:$('targetRate').value?Number($('targetRate').value):null,
+      condition:$('condition').value,
+      needed_by:$('neededBy').value||null,
+      delivery_area:$('deliveryArea').value.trim(),
+      notes:$('notes').value.trim()
     };
-    // Frontend-only draft preview; connect to the buyer-needs API when its backend route is available.
-    $('previewStatus').textContent='READY';
-    $('formMessage').textContent='Requirement details are ready. Connect this page to the buyer-needs API to publish it to collectors.';
-    updatePreview();
+    $('formMessage').textContent='Publishing buyer need…';
+    try{
+      const apiBase=(window.UM_API_BASE||'/api').replace(/\/$/,'');
+      const response=await fetch(apiBase+'/buyer/needs',{
+        method:'POST',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      });
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok) throw new Error(result.error||'Could not publish buyer need');
+      $('previewStatus').textContent='PUBLISHED';
+      $('formMessage').textContent='Buyer need published. Collectors can now view it.';
+      e.target.reset();
+    }catch(err){
+      $('formMessage').textContent=err.message+' (Please make sure you are logged in as a buyer.)';
+    }
   });
   updatePreview();
 })();
