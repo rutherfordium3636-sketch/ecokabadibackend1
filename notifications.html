@@ -1,8 +1,161 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notifications · Urban Mining Connect</title><link rel="stylesheet" href="style.css"><style>.notif-item{display:flex;gap:14px;padding:16px;border-bottom:1px solid #e5e7eb;align-items:flex-start}.notif-item.unread{background:#f0fdf4}.notif-icon{font-size:22px}.notif-item h3{margin:0 0 5px;font-size:15px}.notif-item p{margin:0 0 6px;color:#475569}.notif-meta{font-size:12px;color:#64748b}.notif-actions{margin-left:auto;white-space:nowrap}.empty{padding:30px;text-align:center;color:#64748b}</style></head><body><script src="config.js"></script><script src="app.js"></script><script>requireAuth();</script><script>shell('Notifications')</script><main class="container"><div class="section-gap"></div><section class="card"><div class="metric"><div><h1>🔔 Notifications</h1><p class="muted">Quotes, counter-offers, accepted lots and handover reminders.</p></div><button class="btn btn-soft" onclick="markAll()">Mark all as read</button></div><div id="emailNotice" class="notice" style="margin:12px 0">Email notifications are optional. Configure SMTP on your Node backend to enable them.</div><div id="notificationList"><div class="empty">Loading notifications…</div></div></section></main><script>
-const icons={new_quote:'💬',counter_offer:'↔️',quote_accepted:'✅',handover_reminder:'📅',handover_scheduled:'📅',handover_confirmed:'♻️'};
-function escN(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-async function loadNotifications(){try{const d=await api('/notifications');document.getElementById('emailNotice').textContent=d.emailConfigured?'Email notifications are enabled on this backend.':'In-site notifications are active. Email requires SMTP environment variables on the Node backend.';const list=document.getElementById('notificationList');if(!d.notifications.length){list.innerHTML='<div class="empty">You’re all caught up. New quote and handover updates will appear here.</div>';return}list.innerHTML=d.notifications.map(n=>`<article class="notif-item ${n.read?'':'unread'}"><div class="notif-icon">${icons[n.type]||'🔔'}</div><div style="flex:1"><h3>${escN(n.title)}</h3><p>${escN(n.message)}</p><div class="notif-meta">${new Date(n.created_at).toLocaleString('en-IN')} · ${n.email_status==='sent'?'Email sent':n.email_status==='pending'?'Email pending':'In-site'}</div></div>${n.read?'':'<button class="btn btn-soft notif-actions" onclick="markOne(''+escN(n.id)+'')">Mark read</button>'}</article>`).join('');const count=document.getElementById('notificationCount');if(count)count.textContent=d.unread?`(${d.unread})`:''}catch(e){document.getElementById('notificationList').innerHTML='<div class="empty">Please sign in to view your notifications.</div>'}}
-async function markOne(id){await api('/notifications/read',{method:'POST',body:JSON.stringify({id})});loadNotifications()}
-async function markAll(){await api('/notifications/read-all',{method:'POST'});loadNotifications()}
-loadNotifications();footer();
-</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Notifications · Urban Mining Connect</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .notif-item{display:flex;gap:14px;padding:16px;border-bottom:1px solid #e5e7eb;align-items:flex-start}
+    .notif-item.unread{background:#f0fdf4}
+    .notif-icon{font-size:22px}
+    .notif-item h3{margin:0 0 5px;font-size:15px}
+    .notif-item p{margin:0 0 6px;color:#475569}
+    .notif-meta{font-size:12px;color:#64748b}
+    .notif-actions{margin-left:auto;white-space:nowrap}
+    .empty{padding:30px;text-align:center;color:#64748b}
+    .notif-error{color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px}
+  </style>
+</head>
+<body>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>requireAuth();</script>
+  <script>shell('Notifications');</script>
+
+  <main class="container">
+    <div class="section-gap"></div>
+    <section class="card">
+      <div class="metric">
+        <div>
+          <h1>🔔 Notifications</h1>
+          <p class="muted">Quotes, counter-offers, accepted lots and handover reminders.</p>
+        </div>
+        <button class="btn btn-soft" onclick="markAll()">Mark all as read</button>
+      </div>
+
+      <div id="emailNotice" class="notice" style="margin:12px 0">
+        Email notifications are optional. Configure SMTP on your Node backend to enable them.
+      </div>
+
+      <div id="notificationList">
+        <div class="empty">Loading notifications…</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const icons = {
+      new_quote: '💬',
+      counter_offer: '↔️',
+      quote_accepted: '✅',
+      handover_reminder: '📅',
+      handover_scheduled: '📅',
+      handover_confirmed: '♻️'
+    };
+
+    function escN(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[c]));
+    }
+
+    async function loadNotifications() {
+      const list = document.getElementById('notificationList');
+      const emailNotice = document.getElementById('emailNotice');
+
+      list.innerHTML = '<div class="empty">Loading notifications…</div>';
+
+      try {
+        const d = await api('/notifications');
+
+        emailNotice.textContent = d.emailConfigured
+          ? 'Email notifications are enabled on this backend. New notification events can be emailed to your registered address.'
+          : 'In-site notifications are active. Email requires valid SMTP settings and Nodemailer on the Node backend.';
+
+        if (!Array.isArray(d.notifications)) {
+          throw new Error('The notifications API did not return a notifications list.');
+        }
+
+        if (!d.notifications.length) {
+          list.innerHTML = '<div class="empty">You’re all caught up. New quote and handover updates will appear here.</div>';
+        } else {
+          list.innerHTML = d.notifications.map(n => {
+            const emailStatus = n.email_status === 'sent'
+              ? 'Email sent'
+              : n.email_status === 'pending'
+                ? 'Email pending'
+                : n.email_status === 'not_configured_or_failed'
+                  ? 'Email not sent (check SMTP / Render logs)'
+                  : 'In-site notification';
+
+            const created = n.created_at
+              ? new Date(n.created_at).toLocaleString('en-IN')
+              : '';
+
+            const markReadButton = n.read
+              ? ''
+              : `<button class="btn btn-soft notif-actions"
+                   onclick="markOne('${escN(n.id)}')">Mark read</button>`;
+
+            return `
+              <article class="notif-item ${n.read ? '' : 'unread'}">
+                <div class="notif-icon">${icons[n.type] || '🔔'}</div>
+                <div style="flex:1;min-width:0">
+                  <h3>${escN(n.title || 'Notification')}</h3>
+                  <p>${escN(n.message || '')}</p>
+                  <div class="notif-meta">
+                    ${escN(created)} · ${emailStatus}
+                  </div>
+                </div>
+                ${markReadButton}
+              </article>`;
+          }).join('');
+        }
+
+        const count = document.getElementById('notificationCount');
+        if (count) count.textContent = d.unread ? `(${d.unread})` : '';
+
+      } catch (e) {
+        console.error('Notification loading failed:', e);
+
+        list.innerHTML = `
+          <div class="empty notif-error">
+            Could not load notifications.<br>
+            ${escN(e.message || 'Unknown error')}<br><br>
+            <button class="btn btn-soft" onclick="loadNotifications()">
+              Try again
+            </button>
+          </div>`;
+      }
+    }
+
+    async function markOne(id) {
+      try {
+        await api('/notifications/read', {
+          method: 'POST',
+          body: JSON.stringify({ id })
+        });
+        await loadNotifications();
+      } catch (e) {
+        alert('Could not mark notification as read: ' + (e.message || 'Unknown error'));
+      }
+    }
+
+    async function markAll() {
+      try {
+        await api('/notifications/read-all', { method: 'POST' });
+        await loadNotifications();
+      } catch (e) {
+        alert('Could not mark notifications as read: ' + (e.message || 'Unknown error'));
+      }
+    }
+
+    loadNotifications();
+  </script>
+</body>
+</html>
