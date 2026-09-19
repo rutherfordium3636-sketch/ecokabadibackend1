@@ -3,7 +3,7 @@
 <title>Buyer / Recycler Console • Urban Mining Connect</title><link rel="stylesheet" href="style.css"></head>
 <body><script src="config.js"></script><script src="app.js"></script><script>requireAuth('buyer');</script>
 <header class="topbar"><a class="brand" href="console.html"><span class="brandmark">♻</span><span>Urban Mining Connect</span></a><div class="profile"><span class="badge blue">BUYER / RECYCLER CONSOLE</span><span id="authArea"><button class="btn btn-soft" onclick="logout()">Logout</button></span></div></header>
-<nav class="nav"><a href="console.html" class="active">⌂ Buyer Console</a><a href="index.html">Platform</a><a href="login.html" onclick="logout()">Logout</a></nav>
+<nav class="nav"><a href="console.html" class="active">⌂ Buyer Console</a><a href="index.html">Platform</a><a href="messenger.html">✉ Messenger</a><a href="login.html" onclick="logout()">Logout</a></nav>
 <main class="page fade">
 <div class="eyebrow">RECOVERY PARTNER OPERATIONS</div><h1 class="title">Review lots and negotiate directly with collectors.</h1>
 <p class="subtitle">Each buyer has an independent quote. A quote from another buyer will never appear as your accepted quote.</p>
@@ -25,7 +25,7 @@ function statusBadge(s){const cls=s==='accepted'?'ok':s==='countered'?'blue':s==
 function quoteLot(id,current){const rate=prompt('Enter your buying rate (₹/kg)',current||'');if(rate===null)return;const n=Number(rate);if(!Number.isFinite(n)||n<=0){alert('Enter a valid rate greater than zero.');return}api('/console/quote',{method:'POST',body:JSON.stringify({lot_id:id,rate:n})}).then(loadConsole).catch(e=>alert(e.message))}
 function acceptCounter(id,qid){if(!confirm('Accept the collector counter offer?'))return;api('/console/quote/accept',{method:'POST',body:JSON.stringify({lot_id:id,quote_id:qid})}).then(loadConsole).catch(e=>alert(e.message))}
 function withdrawQuote(id,qid){if(!confirm('Withdraw your quote?'))return;api('/console/quote/withdraw',{method:'POST',body:JSON.stringify({lot_id:id,quote_id:qid})}).then(loadConsole).catch(e=>alert(e.message))}
-async function sendMessage(id,qid){const msg=prompt('Message the collector');if(msg===null||!msg.trim())return;try{await api('/lots/'+encodeURIComponent(id)+'/messages',{method:'POST',body:JSON.stringify({quote_id:qid,message:msg.trim()})});loadConsole()}catch(e){alert(e.message)}}
+function sendMessage(id,qid){location.href='messenger.html?lot_id='+encodeURIComponent(id)+'&quote_id='+encodeURIComponent(qid)}
 function downloadTrail(){location.href=API+'/export/custody.csv'}
 function renderLot(l){
  const q=l.myQuote, photo=photoUrl(l.photo_ref);
