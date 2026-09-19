@@ -1,2 +1,0 @@
-<!-- Add this link to the BUYER navigation menu in your existing app shell/navigation: -->
-<a href="buyer-needs.html">Buyer Needs</a>
