@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Authorized Buyers • Urban Mining Connect</title><link rel="stylesheet" href="style.css"></head>
-<body><script src="config.js"></script><script src="app.js"></script><script>shell("Buyers");</script><script>document.addEventListener("DOMContentLoaded",()=>{const nav=document.querySelector("nav.nav");if(nav&&!Array.from(nav.querySelectorAll("a")).some(a=>a.getAttribute("href")==="messenger.html")){const link=document.createElement("a");link.href="messenger.html";link.textContent="✉ Messenger";nav.appendChild(link);}});</script>
+<title>Collector Matches • Urban Mining Connect</title><link rel="stylesheet" href="style.css"></head>
+<body><script src="config.js"></script><script src="app.js"></script><script>shell("Buyers");</script><script>requireAuth("collector");</script>
 <main class="page fade">
 <div class="eyebrow">REGISTERED BUYER NETWORK</div><h1 class="title">Compare buyer quotes and choose the handover partner.</h1>
 <p class="subtitle">Every buyer has a separate quote. Accept, reject or counter each quote independently, then continue the conversation from the same screen.</p>
