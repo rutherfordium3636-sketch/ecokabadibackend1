@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buyer Needs | Urban Mining Connect</title>
+<link rel="stylesheet" href="style.css">
+<style>
+/* Buyer Needs — styled to sit alongside the collector Capture page */
+.bn-page{max-width:1180px;margin:0 auto;padding:28px 20px 64px}
+.bn-hero{background:linear-gradient(125deg,#073f32,#087b5d);color:#fff;border-radius:24px;padding:28px 30px;margin-bottom:20px;position:relative;overflow:hidden}
+.bn-hero:after{content:"";position:absolute;width:230px;height:230px;border:1px solid #ffffff24;border-radius:50%;right:-55px;top:-90px;box-shadow:0 0 0 28px #ffffff0a,0 0 0 58px #ffffff08}
+.bn-kicker{font-size:11px;font-weight:800;letter-spacing:.15em;color:#b8f7dc;text-transform:uppercase}
+.bn-hero h1{font-size:clamp(30px,4vw,42px);line-height:1.08;margin:9px 0 10px;color:#fff}
+.bn-hero p{max-width:700px;margin:0;color:#e1f7ee;line-height:1.55}
+.bn-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(270px,.75fr);gap:18px;align-items:start}
+.bn-card{background:#fff;border:1px solid #dfebe5;border-radius:20px;padding:22px;box-shadow:0 8px 28px #173f3508}
+.bn-card h2{font-size:20px;margin:0 0 5px;color:#173f35}
+.bn-muted{color:#778780;font-size:13px;line-height:1.5}
+.bn-section{margin-top:21px}
+.bn-label{display:block;font-size:12px;font-weight:800;color:#52665e;margin-bottom:7px}
+.bn-materials{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.bn-material{border:1px solid #dce8e2;background:#fbfdfc;border-radius:13px;padding:12px 10px;text-align:left;cursor:pointer;transition:.15s;min-height:82px;color:#25443a}
+.bn-material:hover{border-color:#65b99c;transform:translateY(-1px)}
+.bn-material.selected{border:2px solid #07805d;background:#eaf8f1;padding:11px 9px;box-shadow:0 0 0 3px #07805d12}
+.bn-material .mi{font-size:22px;display:block;margin-bottom:6px}
+.bn-material b{display:block;font-size:12px;line-height:1.25}
+.bn-material small{display:block;color:#809087;font-size:10px;margin-top:3px}
+.bn-fields{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.bn-field.full{grid-column:1/-1}
+.bn-field input,.bn-field select,.bn-field textarea{width:100%;box-sizing:border-box;border:1px solid #d8e5df;border-radius:11px;padding:12px 13px;background:#fff;color:#183c31;font:inherit;font-size:14px;outline:none}
+.bn-field input:focus,.bn-field select:focus,.bn-field textarea:focus{border-color:#07805d;box-shadow:0 0 0 3px #07805d12}
+.bn-field textarea{min-height:90px;resize:vertical}
+.bn-hint{font-size:11px;color:#84928b;margin-top:5px}
+.bn-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:20px}
+.bn-btn{border:0;border-radius:12px;padding:13px 17px;font-weight:800;font-size:13px;cursor:pointer}
+.bn-primary{background:#087b5d;color:white;box-shadow:0 6px 16px #087b5d20}
+.bn-primary:hover{background:#06694f}
+.bn-secondary{background:#e9f6ef;color:#087b5d}
+.bn-tip{padding:14px;border-radius:13px;background:#f2faf6;border:1px solid #e0f0e7;margin-top:14px}
+.bn-tip b{font-size:13px;color:#225343}.bn-tip p{margin:5px 0 0;font-size:12px;line-height:1.5;color:#71827a}
+.bn-preview{background:#f8fbf9;border:1px solid #e4eee9;border-radius:15px;padding:15px;margin-top:14px}
+.bn-preview-head{display:flex;justify-content:space-between;gap:10px;align-items:start}
+.bn-pill{display:inline-flex;background:#e4f6ec;color:#087b5d;border-radius:99px;padding:5px 9px;font-size:10px;font-weight:800}
+.bn-preview h3{margin:7px 0 3px;font-size:17px;color:#173f35}
+.bn-preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:13px}
+.bn-stat{background:#fff;border:1px solid #e7efeb;border-radius:10px;padding:10px}
+.bn-stat small{display:block;color:#839088;font-size:10px}.bn-stat b{display:block;color:#24483b;font-size:13px;margin-top:3px}
+.bn-note{font-size:12px;color:#71827a;line-height:1.5;margin-top:12px}
+.bn-message{font-size:12px;margin-top:12px;color:#087b5d;min-height:18px}
+@media(max-width:850px){.bn-layout{grid-template-columns:1fr}}
+@media(max-width:560px){.bn-page{padding:18px 12px 40px}.bn-hero{padding:23px 20px}.bn-card{padding:17px}.bn-materials{grid-template-columns:repeat(2,minmax(0,1fr))}.bn-fields{grid-template-columns:1fr}.bn-field.full{grid-column:auto}}
+</style>
+</head>
+<body>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+if(typeof requireAuth==='function') requireAuth('buyer');
+if(typeof shell==='function') shell('Buyer Needs');
+</script>
+
+<main class="bn-page">
+  <section class="bn-hero">
+    <div class="bn-kicker">Urban Mining Connect · Buyer workspace</div>
+    <h1>What material do you need?</h1>
+    <p>Create a material requirement just like a collector captures a lot. Tell collectors what you need, how much you need, and your target rate. No photo required.</p>
+  </section>
+
+  <div class="bn-layout">
+    <section class="bn-card">
+      <h2>Create a buyer need</h2>
+      <div class="bn-muted">Add your requirement details below.</div>
+
+      <form id="buyerNeedForm">
+        <div class="bn-section">
+          <label class="bn-label">1. Select material</label>
+          <div class="bn-materials" id="materialOptions">
+            <button class="bn-material" type="button" data-material="iron" data-group="Ferrous"><span class="mi">🔩</span><b>Iron</b><small>Ferrous</small></button>
+            <button class="bn-material" type="button" data-material="steel" data-group="Ferrous"><span class="mi">🏗️</span><b>Steel</b><small>Ferrous</small></button>
+            <button class="bn-material" type="button" data-material="aluminium" data-group="Non-Ferrous"><span class="mi">🥫</span><b>Aluminium</b><small>Non-Ferrous</small></button>
+            <button class="bn-material" type="button" data-material="copper" data-group="Non-Ferrous"><span class="mi">🟠</span><b>Copper</b><small>Non-Ferrous</small></button>
+            <button class="bn-material" type="button" data-material="brass" data-group="Non-Ferrous"><span class="mi">🟡</span><b>Brass</b><small>Non-Ferrous</small></button>
+            <button class="bn-material" type="button" data-material="lithium" data-group="Critical Minerals"><span class="mi">🔋</span><b>Lithium-bearing battery</b><small>Critical Minerals</small></button>
+            <button class="bn-material" type="button" data-material="magnet" data-group="Critical Minerals"><span class="mi">🧲</span><b>Magnet / rare-earth</b><small>Critical Minerals</small></button>
+            <button class="bn-material" type="button" data-material="pcb" data-group="E-Waste"><span class="mi">🟩</span><b>PCB</b><small>E-Waste</small></button>
+            <button class="bn-material" type="button" data-material="cable" data-group="E-Waste"><span class="mi">🔌</span><b>Copper cable & wire</b><small>E-Waste</small></button>
+            <button class="bn-material" type="button" data-material="panel" data-group="E-Waste"><span class="mi">🖥️</span><b>LCD / LED panel</b><small>E-Waste</small></button>
+            <button class="bn-material" type="button" data-material="battery" data-group="E-Waste"><span class="mi">🔋</span><b>Battery</b><small>E-Waste</small></button>
+            <button class="bn-material" type="button" data-material="mixedmetal" data-group="Mixed Scrap"><span class="mi">🧰</span><b>Mixed metal</b><small>Mixed Scrap</small></button>
+          </div>
+          <input type="hidden" id="materialId" required>
+          <div class="bn-hint">Choose one material category.</div>
+        </div>
+
+        <div class="bn-section">
+          <label class="bn-label">2. Requirement details</label>
+          <div class="bn-fields">
+            <div class="bn-field">
+              <label class="bn-label" for="quantity">Quantity needed (kg) *</label>
+              <input id="quantity" type="number" min="0.1" step="0.1" placeholder="e.g. 500" required>
+            </div>
+            <div class="bn-field">
+              <label class="bn-label" for="targetRate">Target rate (₹/kg)</label>
+              <input id="targetRate" type="number" min="0" step="0.01" placeholder="Optional">
+            </div>
+            <div class="bn-field">
+              <label class="bn-label" for="condition">Required condition</label>
+              <select id="condition">
+                <option value="">Any acceptable condition</option>
+                <option>Clean / sorted</option>
+                <option>Grade A</option>
+                <option>Grade B</option>
+                <option>Mixed</option>
+                <option>As-is</option>
+              </select>
+            </div>
+            <div class="bn-field">
+              <label class="bn-label" for="neededBy">Required by</label>
+              <input id="neededBy" type="date">
+            </div>
+            <div class="bn-field full">
+              <label class="bn-label" for="deliveryArea">Delivery / pickup area</label>
+              <input id="deliveryArea" type="text" maxlength="120" placeholder="City, industrial area, or preferred pickup location">
+            </div>
+            <div class="bn-field full">
+              <label class="bn-label" for="notes">Additional specifications</label>
+              <textarea id="notes" maxlength="700" placeholder="Mention grade, purity, packaging, acceptable mix, pickup terms, etc."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="bn-actions">
+          <button class="bn-btn bn-primary" type="submit">＋ Create buyer need</button>
+          <button class="bn-btn bn-secondary" type="reset" id="clearBtn">Clear form</button>
+        </div>
+        <div class="bn-message" id="formMessage" role="status"></div>
+      </form>
+    </section>
+
+    <aside class="bn-card">
+      <h2>Requirement preview</h2>
+      <div class="bn-muted">Check the key details before publishing.</div>
+      <div class="bn-preview">
+        <div class="bn-preview-head">
+          <span class="bn-pill">BUYER NEED</span>
+          <span class="bn-pill" id="previewStatus">DRAFT</span>
+        </div>
+        <h3 id="previewMaterial">Select a material</h3>
+        <div class="bn-muted" id="previewGroup">Material category</div>
+        <div class="bn-preview-grid">
+          <div class="bn-stat"><small>Quantity</small><b id="previewQty">— kg</b></div>
+          <div class="bn-stat"><small>Target rate</small><b id="previewRate">Not set</b></div>
+          <div class="bn-stat"><small>Condition</small><b id="previewCondition">Any</b></div>
+          <div class="bn-stat"><small>Required by</small><b id="previewDate">Flexible</b></div>
+        </div>
+        <div class="bn-note" id="previewArea">Delivery / pickup area not specified.</div>
+      </div>
+      <div class="bn-tip">
+        <b>How it works</b>
+        <p>Publish your material need. Collectors can review the requirement and submit a quote if they have matching material. New quotes can appear in your Urban Mining Connect notifications.</p>
+      </div>
+      <div class="bn-tip">
+        <b>No image needed</b>
+        <p>This buyer form captures the material requirement only—there is no photo or image-upload field.</p>
+      </div>
+      <div class="bn-muted" style="margin-top:14px">Fields marked * are required.</div>
+    </aside>
+  </div>
+</main>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const materialNames={
+    iron:['Iron','Ferrous'],steel:['Steel','Ferrous'],aluminium:['Aluminium','Non-Ferrous'],
+    copper:['Copper','Non-Ferrous'],brass:['Brass','Non-Ferrous'],
+    lithium:['Lithium-bearing battery','Critical Minerals'],magnet:['Magnet / rare-earth','Critical Minerals'],
+    pcb:['PCB','E-Waste'],cable:['Copper cable & wire','E-Waste'],panel:['LCD / LED panel','E-Waste'],
+    battery:['Battery','E-Waste'],mixedmetal:['Mixed metal','Mixed Scrap']
+  };
+  let selected='';
+  const money=n=>'₹'+Number(n).toLocaleString('en-IN');
+  function updatePreview(){
+    const data=materialNames[selected];
+    $('previewMaterial').textContent=data?data[0]:'Select a material';
+    $('previewGroup').textContent=data?data[1]:'Material category';
+    $('previewQty').textContent=$('quantity').value?Number($('quantity').value).toLocaleString('en-IN')+' kg':'— kg';
+    $('previewRate').textContent=$('targetRate').value?money($('targetRate').value)+'/kg':'Not set';
+    $('previewCondition').textContent=$('condition').value||'Any';
+    $('previewDate').textContent=$('neededBy').value||'Flexible';
+    $('previewArea').textContent=$('deliveryArea').value.trim()||'Delivery / pickup area not specified.';
+  }
+  document.querySelectorAll('.bn-material').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.bn-material').forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selected=btn.dataset.material;
+      $('materialId').value=selected;
+      updatePreview();
+    });
+  });
+  ['quantity','targetRate','condition','neededBy','deliveryArea'].forEach(id=>$(id).addEventListener('input',updatePreview));
+  $('buyerNeedForm').addEventListener('reset',()=>{
+    setTimeout(()=>{
+      selected='';$('materialId').value='';
+      document.querySelectorAll('.bn-material').forEach(b=>b.classList.remove('selected'));
+      $('formMessage').textContent='';
+      $('previewStatus').textContent='DRAFT';
+      updatePreview();
+    },0);
+  });
+  $('buyerNeedForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    if(!selected){$('formMessage').textContent='Please select a material first.';return;}
+    const need={
+      material_id:selected,material_name:materialNames[selected][0],group:materialNames[selected][1],
+      quantity_kg:Number($('quantity').value),target_rate:$('targetRate').value?Number($('targetRate').value):null,
+      condition:$('condition').value,needed_by:$('neededBy').value||null,
+      delivery_area:$('deliveryArea').value.trim(),notes:$('notes').value.trim(),
+      created_at:new Date().toISOString(),status:'draft'
+    };
+    // Frontend-only draft preview; connect to the buyer-needs API when its backend route is available.
+    $('previewStatus').textContent='READY';
+    $('formMessage').textContent='Requirement details are ready. Connect this page to the buyer-needs API to publish it to collectors.';
+    updatePreview();
+  });
+  updatePreview();
+})();
+</script>
+</body>
+</html>
