@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Buyer Needs | Urban Mining Connect</title>
+<title>Sourcing Hub | Urban Mining Connect</title>
 <link rel="stylesheet" href="style.css">
 <style>
 /* Buyer Needs — styled to sit alongside the collector Capture page */
@@ -57,19 +57,19 @@
 <script src="app.js"></script>
 <script>
 if(typeof requireAuth==='function') requireAuth('buyer');
-if(typeof shell==='function') shell('Buyer Needs');
+if(typeof shell==='function') shell('Sourcing Hub');
 </script>
 
 <main class="bn-page">
   <section class="bn-hero">
     <div class="bn-kicker">Urban Mining Connect · Buyer workspace</div>
-    <h1>What material do you need?</h1>
-    <p>Create a material requirement just like a collector captures a lot. Tell collectors what you need, how much you need, and your target rate. No photo required.</p>
+    <h1>Your Sourcing Hub</h1>
+    <p>Publish what your business needs, compare collector offers, and review real material photos—all in one place.</p>
   </section>
 
   <div class="bn-layout">
     <section class="bn-card">
-      <h2>Create a buyer need</h2>
+      <h2>Post a sourcing request</h2>
       <div class="bn-muted">Add your requirement details below.</div>
 
       <form id="buyerNeedForm">
@@ -131,7 +131,7 @@ if(typeof shell==='function') shell('Buyer Needs');
         </div>
 
         <div class="bn-actions">
-          <button class="bn-btn bn-primary" type="submit">＋ Create buyer need</button>
+          <button class="bn-btn bn-primary" type="submit">＋ Publish request</button>
           <button class="bn-btn bn-secondary" type="reset" id="clearBtn">Clear form</button>
         </div>
         <div class="bn-message" id="formMessage" role="status"></div>
@@ -167,6 +167,13 @@ if(typeof shell==='function') shell('Buyer Needs');
       <div class="bn-muted" style="margin-top:14px">Fields marked * are required.</div>
     </aside>
   </div>
+<section class="bn-card" style="margin-top:20px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <div><h2>My sourcing requests</h2><div class="bn-muted">Track your published requests and review collector offers with photos.</div></div>
+    <button class="bn-btn bn-secondary" id="refreshNeeds" type="button">↻ Refresh offers</button>
+  </div>
+  <div id="myNeedsList" style="margin-top:16px"><div class="bn-muted">Loading your requests…</div></div>
+</section>
 </main>
 
 <script>
@@ -234,12 +241,38 @@ if(typeof shell==='function') shell('Buyer Needs');
       const result=await response.json().catch(()=>({}));
       if(!response.ok) throw new Error(result.error||'Could not publish buyer need');
       $('previewStatus').textContent='PUBLISHED';
-      $('formMessage').textContent='Buyer need published. Collectors can now view it.';
-      e.target.reset();
+      $('formMessage').textContent='Request published. Collectors can now view it.';
+      e.target.reset();loadMyNeeds();
     }catch(err){
       $('formMessage').textContent=err.message+' (Please make sure you are logged in as a buyer.)';
     }
   });
+  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function photoUrl(ref){return ref?(window.UM_API_BASE||'/api').replace(/\/api\/?$/,'')+ref:'';}
+  async function loadMyNeeds(){
+    const list=$('myNeedsList');list.innerHTML='<div class="bn-muted">Loading requests…</div>';
+    try{
+      const apiBase=(window.UM_API_BASE||'/api').replace(/\/$/,'');
+      const r=await fetch(apiBase+'/buyer/needs',{credentials:'include'});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw Error(d.error||'Could not load your requests');
+      const needs=d.needs||[];
+      if(!needs.length){list.innerHTML='<div class="bn-muted">No sourcing requests yet. Publish your first request above.</div>';return;}
+      list.innerHTML=needs.map(n=>`<article style="border:1px solid #e0ebe5;border-radius:15px;padding:15px;margin-top:12px;background:#fbfdfc">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><span class="bn-pill">${esc(n.status||'open').toUpperCase()}</span><h3 style="margin:8px 0 3px;color:#173f35">${esc(n.material_name)}</h3><div class="bn-muted">${esc(n.group)} · ${Number(n.quantity_kg||0).toLocaleString('en-IN')} kg needed</div></div><div style="font-weight:800;color:#087b5d">${n.target_rate!=null?'Target ₹'+Number(n.target_rate).toLocaleString('en-IN')+'/kg':'Target rate flexible'}</div></div>
+        <div class="bn-muted" style="margin-top:7px">${esc(n.condition||'Any condition')} · ${esc(n.delivery_area||'Area flexible')} · ${n.needed_by?'Needed by '+esc(n.needed_by):'Flexible date'}</div>
+        ${n.notes?`<p style="font-size:13px;color:#52665e">${esc(n.notes)}</p>`:''}
+        <div style="margin-top:13px;font-weight:800;color:#25443a">Collector offers (${(n.quotes||[]).length})</div>
+        ${(n.quotes||[]).length?(n.quotes||[]).map(q=>`<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,.7fr);gap:12px;align-items:start;border-top:1px solid #e5eee9;padding:13px 0;margin-top:8px">
+          <div><b>${esc(q.collector_name||'Collector')}</b><div style="font-size:14px;font-weight:800;color:#087b5d;margin-top:4px">₹${Number(q.rate||0).toLocaleString('en-IN')}/kg</div><div class="bn-muted">${q.available_kg?esc(q.available_kg)+' kg available · ':''}${esc(q.status||'pending')}</div>${q.message?`<div class="bn-muted" style="margin-top:4px">${esc(q.message)}</div>`:''}</div>
+          ${q.image_ref?`<a href="${esc(photoUrl(q.image_ref))}" target="_blank" rel="noopener"><img src="${esc(photoUrl(q.image_ref))}" alt="Collector material offer" style="width:100%;max-height:160px;object-fit:cover;border-radius:11px;border:1px solid #dce8e2"></a>`:'<div class="bn-muted">No image attached</div>'}
+        </div>`).join(''):'<div class="bn-muted" style="margin-top:7px">No quotes yet. We’ll show collector offers here when they arrive.</div>'}
+      </article>`).join('');
+    }catch(err){list.innerHTML='<div class="bn-muted">'+esc(err.message)+' — please sign in as a buyer and try again.</div>';}
+  }
+  $('refreshNeeds').addEventListener('click',loadMyNeeds);
+  const originalSubmit=$('buyerNeedForm').onsubmit;
+  loadMyNeeds();
   updatePreview();
 })();
 </script>

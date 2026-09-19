@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Demand Board | Urban Mining Connect</title><link rel="stylesheet" href="style.css">
+<style>
+.db-page{max-width:1180px;margin:0 auto;padding:28px 20px 64px}.db-hero{background:linear-gradient(125deg,#073f32,#087b5d);color:#fff;border-radius:24px;padding:30px;margin-bottom:20px;position:relative;overflow:hidden}.db-kicker{font-size:11px;letter-spacing:.14em;font-weight:800;color:#b8f7dc}.db-hero h1{font-size:clamp(30px,4vw,42px);margin:9px 0;color:#fff}.db-hero p{max-width:760px;color:#e1f7ee;margin:0;line-height:1.6}.db-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0}.db-search{flex:1;min-width:220px;border:1px solid #dce8e2;border-radius:12px;padding:12px 14px;font:inherit;background:#fff}.db-count{font-size:12px;color:#708078;font-weight:700}.db-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.db-card{background:#fff;border:1px solid #dfebe5;border-radius:18px;padding:20px;box-shadow:0 8px 28px #173f3508}.db-card h2{font-size:20px;color:#173f35;margin:10px 0 4px}.db-meta{font-size:12px;color:#778780;line-height:1.6}.db-pill{display:inline-flex;background:#e4f6ec;color:#087b5d;border-radius:99px;padding:5px 9px;font-size:10px;font-weight:800}.db-specs{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:14px 0}.db-spec{background:#f6faf7;border:1px solid #e6eee9;border-radius:10px;padding:10px}.db-spec small{display:block;font-size:10px;color:#839088}.db-spec b{display:block;font-size:14px;color:#24483b;margin-top:3px}.db-notes{font-size:13px;color:#52665e;line-height:1.5;margin:10px 0}.db-btn{border:0;border-radius:11px;padding:12px 15px;font-weight:800;cursor:pointer;font-size:12px}.db-primary{background:#087b5d;color:#fff}.db-secondary{background:#e9f6ef;color:#087b5d}.db-quote{display:none;margin-top:15px;padding:15px;background:#f5faf7;border:1px solid #dcebe2;border-radius:13px}.db-quote.open{display:block}.db-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.db-field.full{grid-column:1/-1}.db-field label{display:block;font-size:11px;font-weight:800;color:#52665e;margin-bottom:5px}.db-field input,.db-field textarea{box-sizing:border-box;width:100%;padding:11px;border:1px solid #d7e4dd;border-radius:10px;background:#fff;font:inherit;font-size:13px}.db-field textarea{min-height:70px;resize:vertical}.db-photo-preview{max-width:100%;max-height:190px;border-radius:10px;margin-top:8px;display:none}.db-empty{padding:35px;text-align:center;border:1px dashed #cbded3;border-radius:16px;color:#708078;background:#fbfdfc}.db-msg{font-size:12px;margin-top:9px;color:#087b5d}.db-own{margin-top:12px;padding:10px;border-radius:10px;background:#eef8f1;color:#285a40;font-size:12px}
+@media(max-width:760px){.db-page{padding:18px 12px 40px}.db-hero{padding:23px 20px}.db-grid{grid-template-columns:1fr}.db-fields{grid-template-columns:1fr}.db-field.full{grid-column:auto}}
+</style></head>
+<body><script src="config.js"></script><script src="app.js"></script><script>if(typeof requireAuth==='function')requireAuth('collector');if(typeof shell==='function')shell('Demand Board');</script>
+<main class="db-page">
+<section class="db-hero"><div class="db-kicker">URBAN MINING CONNECT · BUYER DEMAND</div><h1>Demand Board</h1><p>See what buyers are sourcing. If you have matching material, send a competitive offer with your available quantity and a real product photo. Buyers can compare your quote directly in their Sourcing Hub.</p></section>
+<div class="db-toolbar"><input class="db-search" id="search" placeholder="Search material, buyer, area…"><button class="db-btn db-secondary" id="refresh">↻ Refresh board</button><span class="db-count" id="count">Loading requests…</span></div>
+<div class="db-grid" id="requestGrid"><div class="db-empty">Loading open buyer requests…</div></div>
+</main>
+<script>
+(function(){
+const $=id=>document.getElementById(id),API=(window.UM_API_BASE||'/api').replace(/\/$/,'');let requests=[];
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=v=>'₹'+Number(v||0).toLocaleString('en-IN');
+function render(){
+ const term=$('search').value.trim().toLowerCase();
+ const shown=requests.filter(n=>([n.material_name,n.group,n.buyer_name,n.delivery_area,n.condition,n.notes].join(' ')).toLowerCase().includes(term));
+ $('count').textContent=`${shown.length} open request${shown.length===1?'':'s'}`;
+ if(!shown.length){$('requestGrid').innerHTML='<div class="db-empty">No matching open requests right now. Try refreshing later.</div>';return;}
+ $('requestGrid').innerHTML=shown.map(n=>`<article class="db-card">
+ <span class="db-pill">${esc(n.group||'MATERIAL')} · OPEN REQUEST</span><h2>${esc(n.material_name)}</h2><div class="db-meta">Requested by ${esc(n.buyer_name||'Buyer')} · ${esc(n.created_at?new Date(n.created_at).toLocaleDateString(): '')}</div>
+ <div class="db-specs"><div class="db-spec"><small>Quantity needed</small><b>${Number(n.quantity_kg||0).toLocaleString('en-IN')} kg</b></div><div class="db-spec"><small>Buyer target</small><b>${n.target_rate!=null?money(n.target_rate)+'/kg':'Open to offers'}</b></div><div class="db-spec"><small>Condition</small><b>${esc(n.condition||'Flexible')}</b></div><div class="db-spec"><small>Required by</small><b>${esc(n.needed_by||'Flexible')}</b></div></div>
+ <div class="db-meta">⌖ ${esc(n.delivery_area||'Pickup/delivery area flexible')}</div>${n.notes?`<p class="db-notes">${esc(n.notes)}</p>`:''}
+ ${n.own_quote?`<div class="db-own">✓ Your offer: ${money(n.own_quote.rate)}/kg · ${Number(n.own_quote.available_kg||0).toLocaleString('en-IN')} kg · ${esc(n.own_quote.status||'pending')} <br><button class="db-btn db-secondary" style="margin-top:8px" type="button" data-quote="${esc(n.id)}">Update offer</button></div>`:`<div class="db-meta" style="margin-top:9px">${Number(n.quote_count||0)} collector offer(s) received</div><button class="db-btn db-primary" style="margin-top:12px" type="button" data-quote="${esc(n.id)}">＋ Submit a quote</button>`}
+ <form class="db-quote" id="form-${esc(n.id)}" data-need="${esc(n.id)}">
+ <div style="font-weight:800;color:#24483b;margin-bottom:11px">Your material offer</div>
+ <div class="db-fields">
+ <div class="db-field"><label>Offer rate (₹/kg) *</label><input name="rate" type="number" min=".01" step=".01" value="${n.own_quote?esc(n.own_quote.rate):''}" required placeholder="e.g. 145"></div>
+ <div class="db-field"><label>Available quantity (kg) *</label><input name="available_kg" type="number" min=".1" step=".1" value="${n.own_quote?esc(n.own_quote.available_kg):''}" required placeholder="e.g. 500"></div>
+ <div class="db-field full"><label>Material photo * (JPG, PNG, WEBP; max 7 MB)</label><input name="photo" type="file" accept="image/png,image/jpeg,image/webp" required><img class="db-photo-preview" alt="Offer photo preview"></div>
+ <div class="db-field full"><label>Message / material details</label><textarea name="message" maxlength="500" placeholder="Grade, purity, packing, pickup terms…">${esc(n.own_quote?.message||'')}</textarea></div>
+ </div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="db-btn db-primary" type="submit">Send offer to buyer</button><button class="db-btn db-secondary" type="button" data-cancel="${esc(n.id)}">Cancel</button></div><div class="db-msg" role="status"></div>
+ </form></article>`).join('');
+ document.querySelectorAll('[data-quote]').forEach(b=>b.addEventListener('click',()=>{const f=$('form-'+b.dataset.quote);f.classList.toggle('open');}));
+ document.querySelectorAll('[data-cancel]').forEach(b=>b.addEventListener('click',()=> $('form-'+b.dataset.cancel).classList.remove('open')));
+ document.querySelectorAll('.db-quote input[name="photo"]').forEach(inp=>inp.addEventListener('change',()=>{const img=inp.parentElement.querySelector('img');if(inp.files[0]){img.src=URL.createObjectURL(inp.files[0]);img.style.display='block';}}));
+ document.querySelectorAll('.db-quote').forEach(form=>form.addEventListener('submit',submitQuote));
+}
+async function toDataURL(file){
+ if(!file||!file.type.startsWith('image/'))throw Error('Choose a valid image file.');
+ if(file.size>7*1024*1024)throw Error('Photo must be smaller than 7 MB.');
+ const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(Error('Could not read photo'));r.readAsDataURL(file)});
+ return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{const scale=Math.min(1,1280/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*scale);c.height=Math.round(im.height*scale);c.getContext('2d').drawImage(im,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.82));};im.onerror=()=>reject(Error('Could not process photo'));im.src=data;});
+}
+async function submitQuote(e){
+ e.preventDefault();const form=e.currentTarget,fd=new FormData(form),msg=form.querySelector('.db-msg'),btn=form.querySelector('[type=submit]');
+ btn.disabled=true;msg.textContent='Uploading photo and sending your offer…';
+ try{
+  const photo=fd.get('photo');if(!photo||!photo.size)throw Error('Please attach a photo of the material you are offering.');
+  const photoData=await toDataURL(photo);
+  const payload={need_id:form.dataset.need,rate:Number(fd.get('rate')),available_kg:Number(fd.get('available_kg')),message:String(fd.get('message')||'').trim(),photoData};
+  const r=await fetch(API+'/marketplace/buyer-needs/quote',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Could not send quote');
+  msg.textContent='Offer sent! The buyer will see your rate, quantity and photo in their Sourcing Hub.';
+  await loadRequests();
+ }catch(err){msg.textContent=err.message;}finally{btn.disabled=false;}
+}
+async function loadRequests(){
+ $('requestGrid').innerHTML='<div class="db-empty">Loading open buyer requests…</div>';
+ try{const r=await fetch(API+'/marketplace/buyer-needs',{credentials:'include'});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Could not load buyer requests');requests=d.needs||[];render();}
+ catch(err){$('requestGrid').innerHTML=`<div class="db-empty">${esc(err.message)}. Please sign in as a collector and refresh.</div>`;$('count').textContent='Could not load';}
+}
+$('refresh').addEventListener('click',loadRequests);$('search').addEventListener('input',render);loadRequests();
+})();
+</script></body></html>
