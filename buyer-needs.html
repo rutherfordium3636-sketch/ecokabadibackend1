@@ -264,12 +264,27 @@ if(typeof shell==='function') shell('Sourcing Hub');
         ${n.notes?`<p style="font-size:13px;color:#52665e">${esc(n.notes)}</p>`:''}
         <div style="margin-top:13px;font-weight:800;color:#25443a">Collector offers (${(n.quotes||[]).length})</div>
         ${(n.quotes||[]).length?(n.quotes||[]).map(q=>`<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,.7fr);gap:12px;align-items:start;border-top:1px solid #e5eee9;padding:13px 0;margin-top:8px">
-          <div><b>${esc(q.collector_name||'Collector')}</b><div style="font-size:14px;font-weight:800;color:#087b5d;margin-top:4px">₹${Number(q.rate||0).toLocaleString('en-IN')}/kg</div><div class="bn-muted">${q.available_kg?esc(q.available_kg)+' kg available · ':''}${esc(q.status||'pending')}</div>${q.message?`<div class="bn-muted" style="margin-top:4px">${esc(q.message)}</div>`:''}</div>
-          ${q.image_ref?`<a href="${esc(photoUrl(q.image_ref))}" target="_blank" rel="noopener"><img src="${esc(photoUrl(q.image_ref))}" alt="Collector material offer" style="width:100%;max-height:160px;object-fit:cover;border-radius:11px;border:1px solid #dce8e2"></a>`:'<div class="bn-muted">No image attached</div>'}
+          <div><b>${esc(q.collector_name||'Collector')}</b><div style="font-size:14px;font-weight:800;color:#087b5d;margin-top:4px">₹${Number(q.rate||0).toLocaleString('en-IN')}/kg</div><div class="bn-muted">${q.available_kg?esc(q.available_kg)+' kg available · ':''}${esc(q.status||'pending')}</div>${q.message?`<div class="bn-muted" style="margin-top:4px">${esc(q.message)}</div>`:''}
+            ${q.status==='pending'&&n.status==='open'?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="bn-btn bn-primary" type="button" onclick="decideNeedQuote('${esc(n.id)}','${esc(q.id)}','accept')">✓ Accept offer</button><button class="bn-btn bn-secondary" type="button" onclick="decideNeedQuote('${esc(n.id)}','${esc(q.id)}','reject')">✕ Reject</button></div>`:''}
+            ${q.status==='accepted'?'<div class="bn-pill" style="margin-top:8px">✓ OFFER ACCEPTED</div>':''}
+          </div>
+          ${q.image_ref?`<a href="${esc(photoUrl(q.image_ref))}" target="_blank" rel="noopener"><img src="${esc(photoUrl(q.image_ref))}" alt="Collector material offer" style="width:100%;max-height:200px;object-fit:cover;border-radius:11px;border:1px solid #dce8e2"></a>`:'<div class="bn-muted">No image attached</div>'}
         </div>`).join(''):'<div class="bn-muted" style="margin-top:7px">No quotes yet. We’ll show collector offers here when they arrive.</div>'}
       </article>`).join('');
     }catch(err){list.innerHTML='<div class="bn-muted">'+esc(err.message)+' — please sign in as a buyer and try again.</div>';}
   }
+  window.decideNeedQuote=async function(needId,quoteId,action){
+    const verb=action==='accept'?'accept':'reject';
+    if(!confirm((verb==='accept'?'Accept':'Reject')+' this collector offer?'))return;
+    try{
+      const apiBase=(window.UM_API_BASE||'/api').replace(/\/$/,'');
+      const r=await fetch(apiBase+'/buyer/needs/quote-action',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({need_id:needId,quote_id:quoteId,action})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw Error(d.error||'Could not update offer');
+      $('formMessage').textContent=action==='accept'?'Offer accepted. The collector has been notified.':'Offer rejected. The collector has been notified.';
+      await loadMyNeeds();
+    }catch(err){alert(err.message);}
+  };
   $('refreshNeeds').addEventListener('click',loadMyNeeds);
   const originalSubmit=$('buyerNeedForm').onsubmit;
   loadMyNeeds();
