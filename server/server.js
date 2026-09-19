@@ -25,7 +25,7 @@ const seedFacilities=[
 
 function load(){
  if(!fs.existsSync(DB)){const x={materials:seedMaterials,facilities:seedFacilities,users:[],lots:[],handovers:[],events:[]};fs.writeFileSync(DB,JSON.stringify(x,null,2));return x}
- const x=JSON.parse(fs.readFileSync(DB,'utf8'));x.materials??=seedMaterials;x.facilities??=seedFacilities;x.users??=[];x.lots??=[];x.handovers??=[];x.events??=[];x.notifications??=[];
+ const x=JSON.parse(fs.readFileSync(DB,'utf8'));x.materials??=seedMaterials;x.facilities??=seedFacilities;x.users??=[];x.lots??=[];x.handovers??=[];x.events??=[];x.notifications??=[];x.buyer_needs??=[];
  return x;
 }
 let db=load();
@@ -92,6 +92,48 @@ function messageView(m){return {id:m.id,lot_id:m.lot_id,quote_id:m.quote_id||nul
 
 async function api(req,res,url){
  const p=url.pathname;
+
+ // Buyer Needs marketplace: buyers publish requirements; collectors quote.
+ if(req.method==='GET'&&p==='/api/buyer/needs'){
+  const u=requireUser(req,res,'buyer');if(!u)return;
+  const needs=(db.buyer_needs||[]).filter(n=>n.buyer_id===u.id).map(n=>({...n,quotes:(n.quotes||[]).map(q=>({...q}))}));
+  return json(req,res,200,{needs});
+ }
+ if(req.method==='POST'&&p==='/api/buyer/needs'){
+  const u=requireUser(req,res,'buyer');if(!u)return;
+  const x=await body(req);
+  const material=db.materials.find(m=>m.id===String(x.material_id||''));
+  const quantity=Number(x.quantity_kg);
+  if(!material)return json(req,res,400,{error:'Select a valid material'});
+  if(!Number.isFinite(quantity)||quantity<=0)return json(req,res,400,{error:'Quantity must be greater than zero'});
+  const target=x.target_rate===''||x.target_rate==null?null:Number(x.target_rate);
+  if(target!==null&&(!Number.isFinite(target)||target<0))return json(req,res,400,{error:'Target rate must be zero or greater'});
+  const need={id:id('NEED'),buyer_id:u.id,buyer_name:u.name,buyer_email:u.email,material_id:material.id,material_name:material.name,group:material.group,quantity_kg:quantity,target_rate:target,condition:safeText(x.condition||''),needed_by:safeText(x.needed_by||''),delivery_area:safeText(x.delivery_area||''),notes:safeText(x.notes||''),status:'open',created_at:new Date().toISOString(),quotes:[]};
+  db.buyer_needs=db.buyer_needs||[];db.buyer_needs.unshift(need);persist();
+  return json(req,res,201,{need});
+ }
+ if(req.method==='GET'&&p==='/api/marketplace/buyer-needs'){
+  const u=requireUser(req,res,'collector');if(!u)return;
+  const needs=(db.buyer_needs||[]).filter(n=>n.status==='open').map(n=>({id:n.id,buyer_name:n.buyer_name,material_id:n.material_id,material_name:n.material_name,group:n.group,quantity_kg:n.quantity_kg,target_rate:n.target_rate,condition:n.condition,needed_by:n.needed_by,delivery_area:n.delivery_area,notes:n.notes,created_at:n.created_at,quote_count:(n.quotes||[]).length}));
+  return json(req,res,200,{needs});
+ }
+ if(req.method==='POST'&&p==='/api/marketplace/buyer-needs/quote'){
+  const u=requireUser(req,res,'collector');if(!u)return;
+  const x=await body(req),rate=Number(x.rate);
+  if(!x.need_id)return json(req,res,400,{error:'Buyer need ID is required'});
+  if(!Number.isFinite(rate)||rate<=0)return json(req,res,400,{error:'Enter a valid quote rate'});
+  const need=(db.buyer_needs||[]).find(n=>n.id===String(x.need_id));
+  if(!need)return json(req,res,404,{error:'Buyer need not found'});
+  if(need.status!=='open')return json(req,res,409,{error:'This buyer need is no longer open'});
+  need.quotes=need.quotes||[];
+  let q=need.quotes.find(q=>q.collector_id===u.id);
+  const now=new Date().toISOString();
+  if(q){q.rate=rate;q.status='pending';q.updated_at=now;}
+  else {q={id:id('NQ'),collector_id:u.id,collector_name:u.name,rate,status:'pending',created_at:now,updated_at:now};need.quotes.push(q);}
+  need.updated_at=now;persist();
+  notify(need.buyer_id,'buyer_need_quote','New quote for your buyer need',`${u.name||'A collector'} quoted ₹${rate}/kg for your ${need.material_name} requirement.`,{need_id:need.id,quote_id:q.id});
+  return json(req,res,201,{quote:{id:q.id,rate:q.rate,status:q.status}});
+ }
 
  // A dedicated inbox API keeps Messenger independent from the Buyer Console's
  // {incoming: [...]} dashboard response and includes past/accepted conversations.
