@@ -90,6 +90,37 @@ function quoteView(q){
 }
 function messageView(m){return {id:m.id,lot_id:m.lot_id,quote_id:m.quote_id||null,sender_id:m.sender_id,sender_role:m.sender_role,message:m.message,created_at:m.created_at}}
 
+const LOT_STAGES=[
+ {key:'CAPTURED',label:'CAPTURED'},
+ {key:'AVAILABLE',label:'AVAILABLE'},
+ {key:'QUOTES_RECEIVED',label:'QUOTES RECEIVED'},
+ {key:'NEGOTIATING',label:'NEGOTIATING'},
+ {key:'QUOTE_ACCEPTED',label:'QUOTE ACCEPTED'},
+ {key:'HANDOVER_SCHEDULED',label:'HANDOVER SCHEDULED'},
+ {key:'HANDED_OVER',label:'HANDED OVER'},
+ {key:'PAYMENT_CONFIRMED',label:'PAYMENT CONFIRMED'},
+ {key:'RECOVERY_COMPLETED',label:'RECOVERY COMPLETED'}
+];
+function stageIndex(key){return LOT_STAGES.findIndex(s=>s.key===key)}
+function lotStage(lot){
+ if(LOT_STAGES.some(s=>s.key===lot.lifecycle_stage))return lot.lifecycle_stage;
+ if(lot.recovery_completed||lot.recovery_status==='completed')return 'RECOVERY_COMPLETED';
+ if(lot.payment_status==='paid')return 'PAYMENT_CONFIRMED';
+ if(lot.handover_at||lot.status==='confirmed'||lot.transaction_status==='completed'||lot.transaction_status==='handed_over')return 'HANDED_OVER';
+ if(lot.status==='accepted'||lot.transaction_status==='accepted'||(lot.quotes||[]).some(q=>q.status==='accepted'))return 'QUOTE_ACCEPTED';
+ if(lot.status==='negotiating'||lot.transaction_status==='negotiating'||(lot.quotes||[]).some(q=>q.status==='countered'))return 'NEGOTIATING';
+ if((lot.quotes||[]).length||(lot.events||[]).some(e=>e.type==='buyer_quote'))return 'QUOTES_RECEIVED';
+ if(lot.created||(lot.events||[]).some(e=>e.type==='captured'))return 'AVAILABLE';
+ return 'CAPTURED';
+}
+function advanceLotStage(lot,key,by,extra={}){
+ const next=stageIndex(key),current=stageIndex(lotStage(lot));
+ if(next<0||next<current)return;
+ lot.lifecycle_history=Array.isArray(lot.lifecycle_history)?lot.lifecycle_history:[];
+ if(lot.lifecycle_stage!==key){const at=new Date().toISOString();lot.lifecycle_stage=key;lot.lifecycle_history.push({stage:key,at,by:by||null,...extra});lot.events=Array.isArray(lot.events)?lot.events:[];lot.events.push({type:'lifecycle_stage',stage:key,at,by:by||null,...extra});}
+}
+function lifecycleView(lot){return {...lot,lifecycle_stage:lotStage(lot),lifecycle_history:Array.isArray(lot.lifecycle_history)?lot.lifecycle_history:[]}}
+
 async function api(req,res,url){
  const p=url.pathname;
 
@@ -264,14 +295,14 @@ async function api(req,res,url){
  }
 
  if(req.method==='GET'&&p==='/api/lots'){
-  const u=requireUser(req,res,'collector');if(!u)return;return json(req,res,200,db.lots.filter(l=>l.user_id===u.id));
+  const u=requireUser(req,res,'collector');if(!u)return;return json(req,res,200,db.lots.filter(l=>l.user_id===u.id).map(lifecycleView));
  }
 
  if(req.method==='POST'&&p==='/api/lots'){
   const u=requireUser(req,res,'collector');if(!u)return;const x=await body(req);const m=db.materials.find(a=>a.id===x.category)||db.materials.find(a=>a.name===x.name);if(!m)return json(req,res,400,{error:'Unknown material'});const weight=Number(x.weight);if(!Number.isFinite(weight)||weight<=0)return json(req,res,400,{error:'Weight must be greater than zero'});
   const lot={id:x.id||id(),user_id:u.id,collector_id:u.collector_id,category:m.id,group:m.group,name:m.name,weight,rate:Number(x.rate)||m.rate,status:'created',created:x.created||new Date().toISOString(),photo_ref:null,quoted_price:null,facility_id:null,payment_status:'pending',transaction_status:'open',quotes:[],messages:[],events:[]};
   if(x.photoData&&typeof x.photoData==='string'&&x.photoData.startsWith('data:image/')){const mt=x.photoData.match(/^data:image\/(png|jpeg|jpg|webp);base64,/i);if(mt){const ext=mt[1]==='jpeg'?'jpg':mt[1];const file=lot.id+'.'+ext;fs.writeFileSync(path.join(UP,file),Buffer.from(x.photoData.split(',')[1],'base64'));lot.photo_ref='/server/data/uploads/'+file}}
-  lot.events.push({type:'captured',at:new Date().toISOString(),by:u.id});db.lots.unshift(lot);persist();return json(req,res,201,lot);
+  lot.events.push({type:'captured',at:new Date().toISOString(),by:u.id});lot.lifecycle_stage='CAPTURED';lot.lifecycle_history=[{stage:'CAPTURED',at:lot.events[lot.events.length-1].at,by:u.id}];advanceLotStage(lot,'AVAILABLE',u.id);db.lots.unshift(lot);persist();return json(req,res,201,lifecycleView(lot));
  }
 
  if(req.method==='GET'&&p.startsWith('/api/lots/')){
@@ -282,12 +313,35 @@ async function api(req,res,url){
   return json(req,res,200,lot);
  }
 
+ if(req.method==='POST'&&p==='/api/lots/lifecycle'){
+  const u=requireUser(req,res,'collector');if(!u)return;
+  const x=await body(req);const lot=db.lots.find(l=>l.id===String(x.lot_id||'')&&l.user_id===u.id);
+  if(!lot)return json(req,res,404,{error:'Lot not found'});
+  const action=String(x.action||''),now=new Date().toISOString();
+  if(action==='schedule_handover'){
+   if(lotStage(lot)!=='QUOTE_ACCEPTED'&&lotStage(lot)!=='HANDOVER_SCHEDULED')return json(req,res,409,{error:'Accept a quote before scheduling handover'});
+   const when=String(x.scheduled_at||'');if(!when||!Number.isFinite(Date.parse(when))||Date.parse(when)<=Date.now())return json(req,res,400,{error:'Choose a future handover date and time'});
+   lot.handover_scheduled_at=new Date(when).toISOString();advanceLotStage(lot,'HANDOVER_SCHEDULED',u.id,{scheduled_at:lot.handover_scheduled_at});
+   if(lot.buyer_id)notify(lot.buyer_id,'handover_scheduled','Handover scheduled',`Handover for ${lot.name||'your material lot'} is scheduled for ${new Date(when).toLocaleString('en-IN')}.`,{lot_id:lot.id,scheduled_at:lot.handover_scheduled_at});
+  }else if(action==='payment_confirmed'){
+   if(stageIndex(lotStage(lot))<stageIndex('HANDED_OVER'))return json(req,res,409,{error:'Record the material handover before confirming payment'});
+   lot.payment_status='paid';lot.payment_confirmed_at=now;advanceLotStage(lot,'PAYMENT_CONFIRMED',u.id);
+   for(const h of (db.handovers||[]))if(h.lot_id===lot.id){h.payment_status='paid';h.payment_confirmed_at=now;}
+   if(lot.buyer_id)notify(lot.buyer_id,'payment_confirmed','Payment confirmed',`Payment was marked confirmed for ${lot.name||'your material lot'}.`,{lot_id:lot.id});
+  }else if(action==='recovery_completed'){
+   if(stageIndex(lotStage(lot))<stageIndex('PAYMENT_CONFIRMED'))return json(req,res,409,{error:'Confirm payment before marking recovery complete'});
+   lot.recovery_completed=true;lot.recovery_completed_at=now;lot.status='completed';lot.transaction_status='completed';advanceLotStage(lot,'RECOVERY_COMPLETED',u.id);
+   if(lot.buyer_id)notify(lot.buyer_id,'recovery_completed','Recovery completed',`Recovery has been marked complete for ${lot.name||'your material lot'}.`,{lot_id:lot.id});
+  }else return json(req,res,400,{error:'Unknown lifecycle action'});
+  persist();return json(req,res,200,{lot:lifecycleView(lot)});
+ }
+
  if(req.method==='POST'&&p==='/api/handovers'){
   const u=requireUser(req,res,'collector');if(!u)return;const x=await body(req);const lot=db.lots.find(l=>l.id===x.lot_id&&l.user_id===u.id)||db.lots.find(l=>l.user_id===u.id);if(!lot)return json(req,res,400,{error:'No lot available'});
-  normalizeQuotes(lot);const selected=lot.quotes.find(q=>q.id===x.quote_id&&q.status==='accepted');const buyerFacility=selected?db.facilities.find(f=>f.id===selected.facility_id):null;
+  normalizeQuotes(lot);const selected=lot.quotes.find(q=>q.id===x.quote_id&&q.status==='accepted')||lot.quotes.find(q=>q.status==='accepted');if(lotStage(lot)!=='QUOTE_ACCEPTED'&&lotStage(lot)!=='HANDOVER_SCHEDULED')return json(req,res,409,{error:'Accept a quote before recording handover'});const buyerFacility=selected?db.facilities.find(f=>f.id===selected.facility_id):null;
   const buyer=x.facility_id?db.facilities.find(f=>f.name===x.facility_id||f.id===x.facility_id):buyerFacility||db.facilities[0];const now=new Date().toISOString();
   const price=Number(x.final_price??selected?.rate??x.quoted_price??lot.rate);const h={handover_id:id('HO'),lot_id:lot.id,collector_id:u.collector_id,facility_id:buyer?.id||'FAC-GREENLOOP',facility_name:buyer?.name||'GreenLoop Materials',weight:lot.weight,quoted_price:Number(selected?.rate??x.quoted_price??lot.rate),final_price:price,confirmed_at:now,payment_status:x.payment_status||'pending',reference:crypto.randomBytes(3).toString('hex').toUpperCase(),append_only:true};
-  db.handovers.push(h);if(lot.buyer_id)notify(lot.buyer_id,'handover_confirmed','Handover confirmed',`Handover for ${lot.name||'your accepted lot'} has been confirmed.`,{lot_id:lot.id,handover_id:h.handover_id});if(x.scheduled_at){h.scheduled_at=x.scheduled_at;notify(lot.user_id,'handover_scheduled','Handover reminder',`Handover is scheduled for ${new Date(x.scheduled_at).toLocaleString('en-IN')}.`,{lot_id:lot.id,handover_id:h.handover_id});}lot.status='confirmed';lot.transaction_status='completed';lot.facility_id=h.facility_id;lot.quoted_price=h.quoted_price;lot.final_price=h.final_price;lot.payment_status=h.payment_status;lot.handover_at=now;lot.events.push({type:'handover_confirmed',at:now,reference:h.reference,by:u.id});persist();return json(req,res,201,h);
+  db.handovers.push(h);if(lot.buyer_id)notify(lot.buyer_id,'handover_confirmed','Handover confirmed',`Handover for ${lot.name||'your accepted lot'} has been confirmed.`,{lot_id:lot.id,handover_id:h.handover_id});if(x.scheduled_at){h.scheduled_at=x.scheduled_at;lot.handover_scheduled_at=x.scheduled_at;advanceLotStage(lot,'HANDOVER_SCHEDULED',u.id,{scheduled_at:x.scheduled_at});notify(lot.user_id,'handover_scheduled','Handover reminder',`Handover is scheduled for ${new Date(x.scheduled_at).toLocaleString('en-IN')}.`,{lot_id:lot.id,handover_id:h.handover_id});}lot.status='handed_over';lot.transaction_status='handed_over';lot.facility_id=h.facility_id;lot.quoted_price=h.quoted_price;lot.final_price=h.final_price;lot.payment_status=h.payment_status;lot.handover_at=now;lot.events.push({type:'handover_confirmed',at:now,reference:h.reference,by:u.id});advanceLotStage(lot,'HANDED_OVER',u.id,{handover_id:h.handover_id,reference:h.reference});if(lot.payment_status==='paid'){lot.payment_confirmed_at=now;advanceLotStage(lot,'PAYMENT_CONFIRMED',u.id);}persist();return json(req,res,201,{...h,lifecycle_stage:lotStage(lot)});
  }
 
  if(req.method==='GET'&&p==='/api/earnings'){const u=requireUser(req,res,'collector');if(!u)return;const tx=db.lots.filter(l=>l.user_id===u.id&&l.transaction_status==='completed');const paid=tx.filter(l=>l.payment_status==='paid').reduce((a,l)=>a+(l.final_price||l.rate)*l.weight,0);const pending=tx.filter(l=>l.payment_status!=='paid').reduce((a,l)=>a+(l.final_price||l.rate)*l.weight,0);return json(req,res,200,{earned:paid,pending,average:tx.length?tx.reduce((a,l)=>a+(l.final_price||l.rate)*l.weight,0)/tx.length:0,lots:tx})}
@@ -309,7 +363,7 @@ async function api(req,res,url){
   if(q&&['accepted'].includes(q.status))return json(req,res,409,{error:'Your quote is already accepted'});
   const now=new Date().toISOString();
   if(q){q.rate=rate;q.counter_rate=null;q.status='pending';q.updated_at=now}else{q={id:id('QT'),buyer_id:u.id,buyer_name:u.name,buyer_email:u.email,facility_id:facility?.id||null,facility_name:facility?.name||'',rate,status:'pending',created_at:now,updated_at:now};lot.quotes.push(q)}
-  lot.transaction_status=lot.transaction_status==='open'?'negotiating':lot.transaction_status;lot.events=lot.events||[];lot.events.push({type:'buyer_quote',at:now,by:u.id,quote_id:q.id,rate});notify(lot.user_id,'new_quote','New quote received',`${u.name||'A buyer'} offered ₹${rate}/kg for your ${lot.name||'material'} lot.`,{lot_id:lot.id,quote_id:q.id});persist();return json(req,res,200,{lot,quote:quoteView(q)});
+  lot.transaction_status=lot.transaction_status==='open'?'quoted':lot.transaction_status;lot.events=lot.events||[];lot.events.push({type:'buyer_quote',at:now,by:u.id,quote_id:q.id,rate});if(stageIndex(lotStage(lot))<stageIndex('QUOTES_RECEIVED'))advanceLotStage(lot,'QUOTES_RECEIVED',u.id,{quote_id:q.id});notify(lot.user_id,'new_quote','New quote received',`${u.name||'A buyer'} offered ₹${rate}/kg for your ${lot.name||'material'} lot.`,{lot_id:lot.id,quote_id:q.id});persist();return json(req,res,200,{lot,quote:quoteView(q)});
  }
 
  if(req.method==='POST'&&p==='/api/console/quote/withdraw'){
@@ -330,14 +384,14 @@ async function api(req,res,url){
    q.status='accepted';q.rate=Number(q.counter_rate??q.rate);q.counter_rate=null;q.updated_at=now;
    for(const other of lot.quotes)if(other.id!==q.id&&['pending','countered'].includes(other.status)){other.status='rejected';other.updated_at=now}
    lot.buyer_id=q.buyer_id;lot.buyer_name=q.buyer_name;lot.facility_id=q.facility_id;lot.facility_name=q.facility_name;lot.quoted_price=q.rate;lot.final_price=q.rate;lot.transaction_status='accepted';lot.status='accepted';
-   lot.events.push({type:'collector_quote_accepted',at:now,by:u.id,quote_id:q.id,rate:q.rate});notify(q.buyer_id,'quote_accepted','Quote accepted',`Your ${lot.name||'material'} lot has been accepted at ₹${q.rate}/kg.`,{lot_id:lot.id,quote_id:q.id});
+   lot.events.push({type:'collector_quote_accepted',at:now,by:u.id,quote_id:q.id,rate:q.rate});advanceLotStage(lot,'QUOTE_ACCEPTED',u.id,{quote_id:q.id});notify(q.buyer_id,'quote_accepted','Quote accepted',`Your ${lot.name||'material'} lot has been accepted at ₹${q.rate}/kg.`,{lot_id:lot.id,quote_id:q.id});
   }else if(action==='reject'){
    if(q.status==='accepted')return json(req,res,409,{error:'An accepted quote cannot be rejected'});
    q.status='rejected';q.updated_at=now;lot.events.push({type:'collector_quote_rejected',at:now,by:u.id,quote_id:q.id});
   }else if(action==='counter'){
    const rate=Number(x.rate);if(!Number.isFinite(rate)||rate<=0)return json(req,res,400,{error:'Counter rate must be greater than zero'});
    if(q.status==='accepted'||q.status==='rejected')return json(req,res,409,{error:'This quote cannot be countered'});
-   q.counter_rate=rate;q.status='countered';q.updated_at=now;lot.transaction_status='negotiating';lot.events.push({type:'collector_counter',at:now,by:u.id,quote_id:q.id,rate});notify(q.buyer_id,'counter_offer','New counter-offer',`${u.name||'The collector'} countered ₹${rate}/kg for ${lot.name||'your quoted lot'}.`,{lot_id:lot.id,quote_id:q.id});
+   q.counter_rate=rate;q.status='countered';q.updated_at=now;lot.transaction_status='negotiating';lot.events.push({type:'collector_counter',at:now,by:u.id,quote_id:q.id,rate});advanceLotStage(lot,'NEGOTIATING',u.id,{quote_id:q.id});notify(q.buyer_id,'counter_offer','New counter-offer',`${u.name||'The collector'} countered ₹${rate}/kg for ${lot.name||'your quoted lot'}.`,{lot_id:lot.id,quote_id:q.id});
   }else return json(req,res,400,{error:'Unknown quote action'});
   persist();return json(req,res,200,{lot,quote:quoteView(q)});
  }
@@ -360,7 +414,7 @@ const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=u
 function adminDashboard(req,res,user){
  if(!user||user.role!=='admin')return json(req,res,403,{error:'Admin access required'});
  const users=(db.users||[]).map(u=>({id:u.id,user_id:u.id,name:u.name||'',email:u.email||'',phone:u.phone||'',role:u.role||'collector',created_at:u.created_at||u.created||null,active:u.active!==false}));
- const lots=db.lots||[];const completed=lots.filter(l=>l.status==='completed'||l.transaction_status==='completed');const weightKg=lots.reduce((sum,l)=>sum+Number(l.weight_kg||l.weight||0),0);const completedValue=completed.reduce((sum,l)=>sum+Number(l.final_price??l.quoted_price??l.value??0)*Number(l.weight_kg??l.weight??0),0);
+ const lots=(db.lots||[]).map(lifecycleView);const completed=lots.filter(l=>lotStage(l)==='RECOVERY_COMPLETED');const weightKg=lots.reduce((sum,l)=>sum+Number(l.weight_kg||l.weight||0),0);const completedValue=completed.reduce((sum,l)=>sum+Number(l.final_price??l.quoted_price??l.value??0)*Number(l.weight_kg??l.weight??0),0);
  return json(req,res,200,{users,lots,handovers:db.handovers||[],stats:{totalUsers:users.length,collectors:users.filter(u=>u.role==='collector').length,buyers:users.filter(u=>u.role==='buyer'||u.role==='recycler').length,admins:users.filter(u=>u.role==='admin').length,totalLots:lots.length,openLots:lots.length-completed.length,completedLots:completed.length,totalWeightKg:weightKg,completedValue,facilities:(db.facilities||[]).length}});
 }
 
