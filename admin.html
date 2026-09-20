@@ -30,11 +30,14 @@
     transform: scale(1.08);
   }
 
-  .admin-photo a {
-    display: block;
-    width: 100%;
-    height: 100%;
-  }
+  .admin-photo a {display:block;width:100%;height:100%}
+  .life-cell{min-width:235px;max-width:310px}
+  .life-label{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:11px;font-weight:800;color:#087f5b;margin-bottom:7px}
+  .life-track{display:grid;grid-template-columns:repeat(9,minmax(8px,1fr));gap:3px;margin:0 0 5px}
+  .life-track span{height:7px;border-radius:99px;background:#e2e9e5}
+  .life-track span.done{background:#0b8b65}
+  .life-track span.current{background:#f0b429;box-shadow:0 0 0 1px #c28b13}
+  .life-sub{font-size:10px;color:#75847b}
 </style>
   
 </head>
@@ -130,7 +133,7 @@
         <th>Material</th>
         <th>Stream</th>
         <th>Weight</th>
-        <th>Status</th>
+        <th>Lifecycle stage</th>
         <th>Facility</th>
         <th>Created</th>
       </tr>
@@ -195,6 +198,10 @@
       : `<tr><td colspan="7">No matching accounts.</td></tr>`;
   }
 
+const LIFE_STAGES=["CAPTURED","AVAILABLE","QUOTES RECEIVED","NEGOTIATING","QUOTE ACCEPTED","HANDOVER SCHEDULED","HANDED OVER","PAYMENT CONFIRMED","RECOVERY COMPLETED"];
+function lifecycleIndex(l){let key=String(l.lifecycle_stage||'').replace(/_/g,' ');let idx=LIFE_STAGES.indexOf(key);if(idx>=0)return idx;if(l.recovery_completed||l.recovery_status==='completed')return 8;if(l.payment_status==='paid')return 7;if(l.handover_at||l.status==='confirmed'||l.transaction_status==='completed'||l.transaction_status==='handed_over')return 6;if(l.status==='accepted'||l.transaction_status==='accepted'||(l.quotes||[]).some(q=>q.status==='accepted'))return 4;if(l.status==='negotiating'||l.transaction_status==='negotiating'||(l.quotes||[]).some(q=>q.status==='countered'))return 3;if((l.quotes||[]).length)return 2;return l.created?1:0;}
+function renderLifecycle(l){const idx=lifecycleIndex(l),label=LIFE_STAGES[idx];return `<div class="life-cell"><div class="life-label"><span>${esc(label)}</span><span>${idx+1}/9</span></div><div class="life-track" aria-label="${esc(label)}">${LIFE_STAGES.map((_,i)=>`<span class="${i<idx?'done':i===idx?'current':''}" title="${esc(LIFE_STAGES[i])}"></span>`).join('')}</div><div class="life-sub">${idx===8?'Lifecycle complete':`${8-idx} milestone${8-idx===1?'':'s'} remaining`}</div></div>`;}
+
 function renderLots() {
   const body = document.getElementById("lotsBody");
 
@@ -233,7 +240,7 @@ function renderLots() {
         <td>${esc(l.name)}</td>
         <td>${esc(l.group)}</td>
         <td>${esc(l.weight)} kg</td>
-        <td>${esc(l.transaction_status || l.status || "")}</td>
+        <td>${renderLifecycle(l)}</td>
         <td>${esc(l.facility_id || "—")}</td>
         <td>${esc(l.created ? new Date(l.created).toLocaleString() : "")}</td>
       </tr>
